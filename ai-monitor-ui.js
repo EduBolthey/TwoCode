@@ -915,9 +915,10 @@
     }
     const phase = st === 'done' ? 3 : steps.reduce((m, x) => Math.max(m, x.kind === 'edit' ? 1 : x.kind === 'run' ? 2 : 0), 0);
     const isBg = Boolean(p.background || (p.detail && p.detail.includes('achtergrond')));
+    const runningStep = (steps || []).find(x => x.state === 'running');
     const doing = isBg ? T('1 taak op achtergrond', '1 task in background')
-      : !steps.length ? T('Denkt na', 'Thinking')
-      : [T('Code lezen', 'Reading code'), T('Aanpassen', 'Making changes'), T('Tests draaien', 'Running tests')][Math.min(2, phase)];
+      : runningStep ? (runningStep.kind === 'edit' ? T('Aanpassen', 'Making changes') : runningStep.kind === 'run' ? T('Opdracht uitvoeren', 'Running command') : T('Code lezen', 'Reading code'))
+      : T('Denkt na', 'Thinking');
     const past = (state.history || []).filter(h => (h.agent || 'claude') === (p.agent || 'claude'));
     const today = past.filter(h => new Date(h.at).toDateString() === new Date().toDateString() && h.result === 'done').length;
     const five = p.usage?.fiveHour, lastStep = steps[steps.length - 1];
@@ -1337,10 +1338,17 @@
       return;
     }
     if (primary === 'claude' && p) {
-      const steps = p.steps || [], phase = steps.reduce((m, x) => Math.max(m, x.kind === 'edit' ? 1 : x.kind === 'run' ? 2 : 0), 0);
+      const steps = p.steps || [];
       mark(); eyes();
       const isBg = Boolean(p.background || (p.detail && p.detail.includes('achtergrond')));
-      const statusLabel = busy(p) ? (isBg ? T('Taak bezig', 'Task active') : (steps.length ? [T('Lezen', 'Reading'), T('Aanpassen', 'Editing'), T('Testen', 'Testing')][phase] : T('Denkt na', 'Thinking'))) : smallStatus(p);
+      const runningStep = (steps || []).find(x => x.state === 'running');
+      const activeLabel = runningStep
+        ? (runningStep.kind === 'run' ? T('Opdracht uitvoeren', 'Running command')
+           : runningStep.kind === 'edit' ? T('Aanpassen', 'Editing')
+           : runningStep.kind === 'read' ? T('Lezen', 'Reading')
+           : (runningStep.label || T('Bezig', 'Working')))
+        : T('Denkt na', 'Thinking');
+      const statusLabel = busy(p) ? (isBg ? T('Taak bezig', 'Task active') : activeLabel) : smallStatus(p);
       lead(statusLabel, '#ffffff', left + 22);
       if (busy(p)) trail(mmss((p.elapsed || 0) + Math.floor((Date.now() - stateAt) / 1000)), '#8e8e93');
       return;
@@ -2127,7 +2135,17 @@
     const past = (state.history || []).filter(h => (h.agent || 'claude') === (p.agent || 'claude'));
     const today = past.filter(h => new Date(h.at).toDateString() === new Date().toDateString() && h.result === 'done').length;
     let colour = p.agent === 'codex' ? '#3b82f6' : (isAnti ? '#4285f4' : '#d97757'), live = false, part, head, line;
-    if (working) { live = true; part = (phase + 0.5) / 4; head = clockText(p); line = (!steps.length ? T('Denkt na', 'Thinking') : [T('Lezen', 'Reading'), T('Aanpassen', 'Editing'), T('Testen', 'Testing')][phase]) + (p.code?.file && steps[steps.length - 1]?.kind === 'edit' ? ' · ' + p.code.file : ''); }
+    if (working) {
+      live = true;
+      part = (phase + 0.5) / 4;
+      head = clockText(p);
+      const runningStep = (steps || []).find(x => x.state === 'running');
+      line = runningStep
+        ? (runningStep.kind === 'edit' ? T('Aanpassen', 'Editing') + (p.code?.file ? ' · ' + p.code.file : '')
+           : runningStep.kind === 'run' ? T('Opdracht', 'Running command')
+           : T('Lezen', 'Reading'))
+        : T('Denkt na', 'Thinking');
+    }
     else if (st === 'question') { live = true; colour = '#ff9f0a'; part = 1; head = p.permission ? T('Mag dit?', 'May I?') : T('Jouw beurt', 'Your turn'); line = T('Wacht op jou', 'Waiting for you'); }
     else if (doneLook) { colour = doneLook.colour; part = 1; head = T('Klaar', 'Done'); line = p.prompt || T('Alle stappen gedaan', 'Every step done'); }
     else if (failed) { colour = C.red; part = 1; head = T('Gestopt', 'Stopped'); line = p.detail || ''; }

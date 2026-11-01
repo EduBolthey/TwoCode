@@ -118,6 +118,7 @@ process.stdin.on('end', () => {
     title,
     prompt,
     model: modelName,
+    invocation_num: payload.invocationNum ?? payload.invocation_num ?? 0,
     tool_name: toolName,
     tool_input: toolInput,
     tool_response: toolResponse

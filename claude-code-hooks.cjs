@@ -594,12 +594,44 @@ function createHub(options = {}) {
     switch (name) {
       case 'SessionStart':
         s.state = 'ready'; s.detail = 'Klaar voor je vraag'; break;
-      case 'PreInvocation':
       case 'UserPromptSubmit':
         s.startedAt = now; s.endedAt = null; s.state = 'running'; s.detail = who.short + ' is bezig'; s.question = ''; s.permission = null;
         s.ask = null; s.plan = null; s.stats = {}; s.steps = []; s.files = []; s.commands = []; s.code = null; s.run = null;
         s.prompt = String(event.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 240); s.lastMessage = '';
         if (!s.title && s.prompt) s.title = s.prompt.slice(0, 36); break;
+      case 'PreInvocation': {
+        const cleanPrompt = String(event.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+        const isNewPrompt = Boolean(cleanPrompt && s.prompt && cleanPrompt !== s.prompt);
+        const isFirstInvocation = event.invocation_num === 1;
+        const isTurnStart = !s.startedAt || s.endedAt !== null || s.state !== 'running' || isNewPrompt || isFirstInvocation;
+
+        s.state = 'running';
+        s.endedAt = null;
+        s.detail = 'Denkt na...';
+        s.question = '';
+        s.permission = null;
+        s.ask = null;
+        s.plan = null;
+
+        if (cleanPrompt) s.prompt = cleanPrompt;
+        if (!s.title && s.prompt) s.title = s.prompt.slice(0, 36);
+
+        if (isTurnStart) {
+          s.startedAt = now;
+          s.stats = {};
+          s.steps = [];
+          s.files = [];
+          s.commands = [];
+          s.code = null;
+          s.run = null;
+          s.lastMessage = '';
+        } else {
+          for (const step of s.steps || []) {
+            if (step.state === 'running') step.state = 'done';
+          }
+        }
+        break;
+      }
       case 'PreToolUse':
         start();
         if (event.prompt && !s.prompt) s.prompt = String(event.prompt).replace(/\s+/g, ' ').trim().slice(0, 240);
