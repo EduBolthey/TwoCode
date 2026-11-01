@@ -881,7 +881,7 @@
     const capsules = (p.list && p.list.length > 1)
       ? `<div class="am-capsules">${p.list.map(item => {
           const isWorking = item.state === 'running' || item.state === 'sending';
-          const capDotColor = isWorking ? '#30d158' : (item.state === 'error' ? '#ff3b3b' : (item.state === 'question' ? '#ff9a1f' : 'rgba(255,255,255,.45)'));
+          const capDotColor = isWorking ? '#30d158' : (item.state === 'error' ? '#ff3b3b' : (item.state === 'question' ? '#ff9a1f' : item.state === 'done' ? '#30d158' : 'rgba(255,255,255,.45)'));
           return `
           <button type="button" class="am-capsule ${item.active ? 'active' : ''}" data-sid="${escape(item.id)}" title="${escape(item.title || item.project)}">
             <i class="am-cap-dot ${isWorking ? 'blink' : ''}" style="--lamp:${capDotColor}"></i>
@@ -891,7 +891,7 @@
         }).join('')}</div>`
       : '';
     const steps = p.steps || [], working = busy(p), failed = ['error', 'stopped'].includes(st);
-    const idle = !working && !p.prompt && !['done', 'question', 'error', 'stopped'].includes(st);
+    const idle = !working && !['done', 'question', 'error', 'stopped'].includes(st);
     const MARK = p.agent === 'antigravity'
       ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C12 7.5 7.5 12 2 12C7.5 12 12 16.5 12 22C12 16.5 16.5 12 22 12C16.5 12 12 7.5 12 2Z"/></svg>'
       : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 4v16M4 12h16M6.3 6.3l11.4 11.4M17.7 6.3 6.3 17.7"/></svg>';

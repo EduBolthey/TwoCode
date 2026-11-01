@@ -18,7 +18,7 @@ const REPLY_SCRIPT = path.join(__dirname, 'twocode-reply.cjs');
 const REPLY_WAIT_S = 1800; // how long an island answer can still wake Claude after it stopped
 const VERSION = 4; // Bump when the installed hook config changes; older installs are upgraded on start.
 const HOOK_URL = 'http://127.0.0.1:' + PORT + ROUTE + '?v=' + VERSION;
-const EVENTS = ['UserPromptSubmit', 'PreInvocation', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
+const EVENTS = ['UserPromptSubmit', 'PreInvocation', 'PostInvocation', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
   'Notification', 'Stop', 'StopFailure', 'SessionEnd', 'SessionStart'];
 // The terminal dialog stays usable while this hook waits; whoever answers first wins.
 const PERMISSION_WAIT_S = 300;
@@ -27,6 +27,7 @@ const RANK = { question: 4, error: 3, running: 2, done: 1, ready: 0 };
 // The two coding agents TwoCode follows. Codex reads its hooks from ~/.codex/hooks.json (the same shape as Claude Code).
 const AGENTS = { claude: { id: 'claudecode', name: 'Claude Code', short: 'Claude' }, codex: { id: 'codex', name: 'Codex', short: 'Codex' }, antigravity: { id: 'antigravity', name: 'Antigravity', short: 'Antigravity' } };
 const CODEX_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'Stop', 'SessionEnd'];
+const ANTIGRAVITY_EVENTS = ['SessionStart', 'PreInvocation', 'PostInvocation', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd'];
 
 function createHub(options = {}) {
   const userData = options.userData;
@@ -239,12 +240,12 @@ function createHub(options = {}) {
                       gitStats,
                       background: hasBackground,
                       preview: row.preview || '',
-                      state: isBusy ? 'running' : 'ready',
-                      detail: isRunning ? 'Antigravity is bezig' : hasBackground ? '1 taak op achtergrond' : 'Klaar',
+                      state: 'ready',
+                      detail: 'Klaar',
                       question: '',
                       permission: null,
-                      startedAt: isBusy ? (modTime || now) : null,
-                      endedAt: isBusy ? null : modTime,
+                      startedAt: null,
+                      endedAt: modTime,
                       updatedAt: modTime || now
                     });
                     changedAny = true;
@@ -258,21 +259,27 @@ function createHub(options = {}) {
                     if (gitStats) { existing.gitStats = gitStats; }
                     existing.background = hasBackground;
                     if (row.preview && !existing.preview) { existing.preview = row.preview; }
-                    if ((!existing.steps || !existing.steps.length) && existing.state !== 'question') {
-                      const nextState = isBusy ? 'running' : 'ready';
-                      const nextDetail = isRunning ? 'Antigravity is bezig' : hasBackground ? '1 taak op achtergrond' : 'Klaar';
-                      if (existing.state !== nextState || existing.detail !== nextDetail) {
-                        existing.state = nextState;
-                        existing.detail = nextDetail;
-                        if (isBusy && !existing.startedAt) existing.startedAt = modTime || now;
-                        changedAny = true;
-                      }
-                    }
                   }
                 }
               }
             }
           } catch {}
+        }
+      }
+
+      // Inactivity watchdog: if an Antigravity session is marked running but has had no hook for > 15 seconds, mark it done
+      for (const s of sessions.values()) {
+        if (s.agent === 'antigravity' && s.state === 'running') {
+          const lastActive = s.lastHookAt || s.updatedAt || s.startedAt;
+          if (lastActive && (now - lastActive > 15000)) {
+            s.state = 'done';
+            s.endedAt = lastActive;
+            s.detail = 'Klaar';
+            for (const step of s.steps || []) {
+              if (step.state === 'running') step.state = 'done';
+            }
+            changedAny = true;
+          }
         }
       }
 
@@ -324,12 +331,12 @@ function createHub(options = {}) {
                     gitStats,
                     background: hasBackground,
                     preview: row.preview || '',
-                    state: isBusy ? 'running' : 'ready',
-                    detail: isRunning ? 'Antigravity is bezig' : hasBackground ? '1 taak op achtergrond' : 'Klaar',
+                    state: 'ready',
+                    detail: 'Klaar',
                     question: '',
                     permission: null,
-                    startedAt: isBusy ? (modTime || now) : null,
-                    endedAt: isBusy ? null : modTime,
+                    startedAt: null,
+                    endedAt: modTime,
                     updatedAt: modTime || now
                   });
                 }
@@ -564,7 +571,8 @@ function createHub(options = {}) {
   function apply(event, res, agent = 'claude') {
     const id = typeof event.session_id === 'string' ? event.session_id : '';
     const name = event.hook_event_name;
-    if (!id || !(agent === 'codex' ? CODEX_EVENTS : EVENTS).includes(name)) return false;
+    const allowed = agent === 'codex' ? CODEX_EVENTS : agent === 'antigravity' ? ANTIGRAVITY_EVENTS : EVENTS;
+    if (!id || !allowed.includes(name)) return false;
     const who = AGENTS[agent] || AGENTS.claude;
     if (agent === 'codex' || agent === 'antigravity') res = null; // Codex and Antigravity do not wait for the island: you answer in their own window
     // A finished tool or turn means the permission was answered elsewhere (terminal, phone).
@@ -576,6 +584,7 @@ function createHub(options = {}) {
     const now = Date.now();
     const s = sessions.get(id) || { id, agent, state: 'ready', detail: '', question: '', permission: null, startedAt: null, endedAt: null, updatedAt: now };
     s.agent = agent;
+    s.lastHookAt = now;
     if (typeof event.cwd === 'string') { s.project = path.basename(event.cwd); s.cwd = event.cwd; }
     if (event.title) s.title = event.title;
     if (event.model) s.modelName = event.model;
@@ -681,6 +690,7 @@ function createHub(options = {}) {
         }
         break;
       }
+      case 'PostInvocation':
       case 'Stop': {
         const question = questionFrom(String(event.last_assistant_message || ''));
         s.endedAt = now; s.state = question ? 'question' : 'done'; s.permission = null; s.ask = null; s.plan = null;

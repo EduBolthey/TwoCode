@@ -150,7 +150,8 @@ process.stdin.on('end', () => {
   req.end();
 
   // Always respond to Antigravity immediately so agent never blocks
-  const output = (process.argv[2] === "PreInvocation" || process.argv[2] === "SessionStart") ? { injectSteps: [] } : { decision: "allow" };
+  const isStepsHook = process.argv[2] === 'PreInvocation' || process.argv[2] === 'SessionStart' || process.argv[2] === 'PostInvocation';
+  const output = isStepsHook ? { injectSteps: [] } : { decision: 'allow' };
   process.stdout.write(JSON.stringify(output) + '\n');
 });
 
