@@ -565,6 +565,15 @@
 #twocode-ai-monitor .am-cap-dot.blink{animation:am-pulse 1.1s ease-in-out infinite;box-shadow:0 0 8px var(--lamp,#30d158)}
 #twocode-ai-monitor .am-cap-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 #twocode-ai-monitor .am-cap-time{font-size:10px;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;flex:none}
+#twocode-ai-monitor .gl-chat-prompt{display:flex;align-items:flex-start;gap:8px;padding:6px 10px;margin-bottom:6px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:9px;font-size:11.5px;line-height:15px;color:#fff;flex:none}
+#twocode-ai-monitor .gl-prompt-badge{flex:none;margin-top:2px;display:flex;align-items:center;justify-content:center}
+#twocode-ai-monitor .gl-prompt-badge.done{color:#30d158}
+#twocode-ai-monitor .gl-prompt-badge.working{color:#ff9a1f}
+#twocode-ai-monitor .gl-prompt-text{flex:1;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-weight:550;letter-spacing:-.1px}
+#twocode-ai-monitor .gl-diff-stat{font-size:11px;color:rgba(255,255,255,.75);display:inline-flex;align-items:center;gap:3px}
+#twocode-ai-monitor .gl-diff-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.08);font-size:11px;color:rgba(255,255,255,.85);margin-bottom:6px;flex:none}
+#twocode-ai-monitor .gl-diff-add{color:#30d158;font-weight:700}
+#twocode-ai-monitor .gl-diff-del{color:#ff453a;font-weight:700}
 #twocode-ai-monitor.cl-new .gl-tasks-scroll{flex:1;min-height:0;max-height:102px;overflow-y:auto;overflow-x:hidden;padding-right:3px;margin-top:2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
 #twocode-ai-monitor.cl-new .gl-tasks-scroll::-webkit-scrollbar{width:4px}
 #twocode-ai-monitor.cl-new .gl-tasks-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:4px}
@@ -905,17 +914,46 @@
       return capsules + `<div class="gl-col">${tile}<p class="gl-title">${T(p.name + ' vraagt iets', p.name + ' asks something')}</p><div class="gl-card gl-scroll">${askForm(p)}</div></div>`;
     }
     const phase = st === 'done' ? 3 : steps.reduce((m, x) => Math.max(m, x.kind === 'edit' ? 1 : x.kind === 'run' ? 2 : 0), 0);
-    const doing = !steps.length ? T('Denkt na', 'Thinking') : [T('Code lezen', 'Reading code'), T('Aanpassen', 'Making changes'), T('Tests draaien', 'Running tests')][Math.min(2, phase)];
+    const isBg = Boolean(p.background || (p.detail && p.detail.includes('achtergrond')));
+    const doing = isBg ? T('1 taak op achtergrond', '1 task in background')
+      : !steps.length ? T('Denkt na', 'Thinking')
+      : [T('Code lezen', 'Reading code'), T('Aanpassen', 'Making changes'), T('Tests draaien', 'Running tests')][Math.min(2, phase)];
     const past = (state.history || []).filter(h => (h.agent || 'claude') === (p.agent || 'claude'));
     const today = past.filter(h => new Date(h.at).toDateString() === new Date().toDateString() && h.result === 'done').length;
     const five = p.usage?.fiveHour, lastStep = steps[steps.length - 1];
     const RES = { done: ['ok', CHECK], question: ['ask', '?'], error: ['bad', '!'], stopped: ['bad', '!'] };
+
+    const chatPrompt = p.prompt || p.preview || '';
+    const isChatWorking = working;
+    const promptHeader = chatPrompt ? `
+      <div class="gl-chat-prompt">
+        <span class="gl-prompt-badge ${isChatWorking ? 'working' : 'done'}">
+          ${isChatWorking ? '<i class="am-cap-dot blink" style="--lamp:#ff9a1f;width:8px;height:8px"></i>' : CHECK}
+        </span>
+        <span class="gl-prompt-text" title="${escape(chatPrompt)}">
+          ${escape(chatPrompt)}
+        </span>
+      </div>` : '';
+
+    const hasGit = Boolean(p.gitStats && (p.gitStats.files > 0 || p.gitStats.additions > 0 || p.gitStats.deletions > 0));
+    const diffPill = hasGit ? `
+      <div class="gl-diff-pill">
+        <b>${p.gitStats.files} ${p.gitStats.files === 1 ? 'file' : 'files'} changed</b>
+        <span class="gl-diff-add">+${p.gitStats.additions}</span>
+        <span class="gl-diff-del">-${p.gitStats.deletions}</span>
+      </div>` : '';
+
     let big, word = false, sub, card;
     if (idle) {
-      big = p.stepCount ? `${p.stepCount}` : String(today);
-      sub = p.stepCount
-        ? (p.workspace ? `stappen · ${escape(p.workspace)}` : T('stappen voltooid', 'steps completed'))
-        : T(today === 1 ? 'klus gedaan vandaag' : 'klussen gedaan vandaag', today === 1 ? 'job done today' : 'jobs done today');
+      if (hasGit) {
+        big = `${p.gitStats.files} files`;
+        word = true;
+        sub = `<span class="gl-diff-stat"><b>changed</b> <span class="gl-diff-add">+${p.gitStats.additions}</span> <span class="gl-diff-del">-${p.gitStats.deletions}</span></span>`;
+      } else {
+        big = p.elapsed ? clock(p.elapsed) : T('Klaar', 'Done');
+        word = true;
+        sub = p.workspace ? `Project · ${escape(p.workspace)}` : T('Klaar · gereed', 'Done · ready');
+      }
       const pastDistinct = [];
       for (const h of past) {
         if (!pastDistinct.some(x => x.prompt === h.prompt || (x.project && x.project === h.project))) {
@@ -923,31 +961,39 @@
         }
         if (pastDistinct.length >= 25) break;
       }
-      const sessionSummary = p.lastMessage || p.preview || (p.prompt && p.prompt !== where ? p.prompt : '');
-      if (sessionSummary && sessionSummary !== where && (p.stepCount || p.workspace)) {
-        card = `<p class="gl-cap">${escape(where)}</p><div class="gl-tasks-scroll"><div class="gl-md md" style="font-size:12px;line-height:16px">${md(sessionSummary)}</div></div>`;
-      } else {
-        card = pastDistinct.length ? `<p class="gl-cap">${T('Laatst gedaan', 'Recently')}</p><div class="gl-tasks-scroll">` + pastDistinct.map(h => { const [cls, g] = RES[h.result] || ['', '•'];
-          return `<div class="gl-row h" title="${escape(h.prompt)}"><i class="gl-dot ${cls}">${g}</i><b>${escape(h.prompt)}</b><em>${escape(new Date(h.at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))}</em></div>`; }).join('') + `</div>`
-          : `<div class="gl-empty">${T(`Geef ${escape(p.name)} een klus in ${p.agent === 'antigravity' ? 'Antigravity' : 'je terminal'}. Hier zie je dan live wat hij doet: de code, de tests en zijn antwoord.`, `Give ${escape(p.name)} a job in ${p.agent === 'antigravity' ? 'Antigravity' : 'your terminal'}. You'll see what it does here, live: the code, the tests and its answer.`)}</div>`;
-      }
+      const sessionSummary = p.lastMessage || (p.preview && p.preview !== chatPrompt ? p.preview : '');
+      const bodyContent = sessionSummary && sessionSummary !== where && sessionSummary !== chatPrompt
+        ? `<div class="gl-tasks-scroll"><div class="gl-md md" style="font-size:12px;line-height:16px">${md(sessionSummary)}</div></div>`
+        : pastDistinct.length
+          ? `<p class="gl-cap">${T('Laatst gedaan', 'Recently')}</p><div class="gl-tasks-scroll">` + pastDistinct.map(h => { const [cls, g] = RES[h.result] || ['', '•'];
+            return `<div class="gl-row h" title="${escape(h.prompt)}"><i class="gl-dot ${cls}">${g}</i><b>${escape(h.prompt)}</b><em>${escape(new Date(h.at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))}</em></div>`; }).join('') + `</div>`
+          : `<div class="gl-empty">${T('Klaar voor je volgende vraag.', 'Ready for your next prompt.')}</div>`;
+      card = promptHeader + diffPill + bodyContent;
     } else if (st === 'question') {
       big = T('Jouw beurt', 'Your turn'); word = true; sub = T(p.name + ' wacht op je antwoord', p.name + ' is waiting for you');
-      card = `<div class="gl-md md">${md(p.question || p.lastMessage || T(p.name + ' heeft je nodig.', p.name + ' needs you.'))}</div>`;
+      card = promptHeader + `<div class="gl-md md">${md(p.question || p.lastMessage || T(p.name + ' heeft je nodig.', p.name + ' needs you.'))}</div>`;
     } else if (st === 'done') {
-      big = p.elapsed ? clock(p.elapsed) : T('Klaar', 'Done'); word = !p.elapsed; sub = T('Klaar · alle stappen gedaan', 'Done · every step');
-      card = `<div class="gl-md md">${p.lastMessage ? md(p.lastMessage) : T('Klaar. Het antwoord staat klaar.', 'Done. The answer is ready.')}</div>`;
+      if (hasGit) {
+        big = `${p.gitStats.files} files`;
+        word = true;
+        sub = `<span class="gl-diff-stat"><b>changed</b> <span class="gl-diff-add">+${p.gitStats.additions}</span> <span class="gl-diff-del">-${p.gitStats.deletions}</span></span>`;
+      } else {
+        big = p.elapsed ? clock(p.elapsed) : T('Klaar', 'Done');
+        word = !p.elapsed;
+        sub = T('Klaar · alle taken voltooid', 'Done · all tasks finished');
+      }
+      card = promptHeader + diffPill + `<div class="gl-md md">${p.lastMessage ? md(p.lastMessage) : T('Klaar. Het antwoord staat klaar.', 'Done. The answer is ready.')}</div>`;
     } else if (failed) {
       big = T('Gestopt', 'Stopped'); word = true; sub = escape(p.detail || T('Er ging iets mis', 'Something went wrong'));
-      card = `<div class="gl-md"><b>${escape(p.detail || T('Er ging iets mis', 'Something went wrong'))}</b><br>${T('Kijk in de terminal wat er misging.', 'Check the terminal to see what went wrong.')}</div>`;
+      card = promptHeader + `<div class="gl-md"><b>${escape(p.detail || T('Er ging iets mis', 'Something went wrong'))}</b><br>${T('Kijk in de terminal wat er misging.', 'Check the terminal to see what went wrong.')}</div>`;
     } else {
       big = `<span class="cx-timer" data-live="1" data-base="${p.elapsed || 0}" data-at="${Date.now()}">${clock(p.elapsed || 0)}</span>`;
-      sub = `${doing} · ${T(`stap ${Math.min(4, phase + 1)} van 4`, `step ${Math.min(4, phase + 1)} of 4`)}`;
-      card = lastStep?.kind === 'edit' && p.code ? codePanel(p.code, 3)
+      sub = isBg ? T('1 taak op de achtergrond', '1 task running in background') : `${doing} · ${T(`stap ${Math.min(4, phase + 1)} van 4`, `step ${Math.min(4, phase + 1)} of 4`)}`;
+      card = promptHeader + (lastStep?.kind === 'edit' && p.code ? codePanel(p.code, 3)
         : lastStep?.kind === 'run' && p.run ? termPanel(p.run)
-        : !steps.length ? `<div class="gl-think">${p.prompt ? `<p>“${escape(p.prompt)}”</p>` : ''}<span>${T(p.name + ' denkt na…', p.name + ' is thinking…')}</span></div>`
+        : !steps.length ? `<div class="gl-think"><span>${isBg ? '⚡ ' + T('1 taak draait op de achtergrond…', '1 task running in background…') : T(p.name + ' denkt na…', p.name + ' is thinking…')}</span></div>`
         : steps.slice(-3).map(x => { const now = x.state === 'running';
-          return `<div class="gl-row${now ? '' : ' d'}"><i class="ic">${svg(x.kind, 12)}</i><b>${(now ? NOW : PAST)[x.kind] || ''}</b><code>${escape(shortWhat(x.kind, x.what))}</code>${now ? '<span class="gl-spin"></span>' : `<span class="gl-ok">${CHECK}</span>`}</div>`; }).join('');
+          return `<div class="gl-row${now ? '' : ' d'}"><i class="ic">${svg(x.kind, 12)}</i><b>${(now ? NOW : PAST)[x.kind] || ''}</b><code>${escape(shortWhat(x.kind, x.what))}</code>${now ? '<span class="gl-spin"></span>' : `<span class="gl-ok">${CHECK}</span>`}</div>`; }).join(''));
     }
     const PH = [T('Lezen', 'Read'), T('Aanpassen', 'Edit'), T('Testen', 'Test'), T('Klaar', 'Done')];
     const stepBar = `<div class="gl-steps${st === 'done' ? ' done' : failed ? ' bad' : ''}">${PH.map((label, i) => {
@@ -1238,7 +1284,22 @@
     const mmss = sec => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
     const lead = (s, colour, x = left, maxW = mid - 26 - left) => text(s, x, cy + 5, 14, colour, 600, 'left', maxW);
     const trail = (s, colour) => text(s, right, cy + 5, 14, colour, 600, 'right', right - mid - 26);
-    const mark = () => { ctx.save(); ctx.strokeStyle = '#d97757'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; for (let i = 0; i < 4; i++) { const an = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(left + 7 - Math.cos(an) * 6.5, cy - Math.sin(an) * 6.5); ctx.lineTo(left + 7 + Math.cos(an) * 6.5, cy + Math.sin(an) * 6.5); ctx.stroke(); } ctx.restore(); };
+    const mark = (c) => {
+      const isAnti = p?.agent === 'antigravity' || p?.provider === 'antigravity';
+      if (isAnti) {
+        geminiMark(left + 7, cy, c || '#4285f4', 15);
+      } else {
+        ctx.save(); ctx.strokeStyle = c || '#d97757'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+        for (let i = 0; i < 4; i++) {
+          const an = i * Math.PI / 4;
+          ctx.beginPath();
+          ctx.moveTo(left + 7 - Math.cos(an) * 6.5, cy - Math.sin(an) * 6.5);
+          ctx.lineTo(left + 7 + Math.cos(an) * 6.5, cy + Math.sin(an) * 6.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    };
     const colourFor = () => '#ffffff'; // calm: the words are white, Robo's eyes carry the state's colour
 
     if (message && !message.trim()) { // hello and goodbye (twocode-fun.js keep the island open with a space): Robo is the show, big in the middle
@@ -1278,7 +1339,9 @@
     if (primary === 'claude' && p) {
       const steps = p.steps || [], phase = steps.reduce((m, x) => Math.max(m, x.kind === 'edit' ? 1 : x.kind === 'run' ? 2 : 0), 0);
       mark(); eyes();
-      lead(busy(p) ? (steps.length ? [T('Lezen', 'Reading'), T('Aanpassen', 'Editing'), T('Testen', 'Testing')][phase] : T('Denkt na', 'Thinking')) : smallStatus(p), '#ffffff', left + 22);
+      const isBg = Boolean(p.background || (p.detail && p.detail.includes('achtergrond')));
+      const statusLabel = busy(p) ? (isBg ? T('Taak bezig', 'Task active') : (steps.length ? [T('Lezen', 'Reading'), T('Aanpassen', 'Editing'), T('Testen', 'Testing')][phase] : T('Denkt na', 'Thinking'))) : smallStatus(p);
+      lead(statusLabel, '#ffffff', left + 22);
       if (busy(p)) trail(mmss((p.elapsed || 0) + Math.floor((Date.now() - stateAt) / 1000)), '#8e8e93');
       return;
     }

@@ -94,6 +94,80 @@ function createHub(options = {}) {
     return dbs;
   }
 
+  let gitStatsCache = new Map(); // cwd -> { at, stats }
+  function getGitStats(cwd) {
+    if (!cwd || typeof cwd !== 'string') return null;
+    const now = Date.now();
+    const cached = gitStatsCache.get(cwd);
+    if (cached && (now - cached.at < 3000)) return cached.stats;
+    try {
+      const cp = require('node:child_process');
+      let out = '';
+      try {
+        out = cp.execSync('git diff --shortstat', { cwd, encoding: 'utf8', timeout: 1200, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      } catch {}
+      if (!out) {
+        try {
+          out = cp.execSync('git diff HEAD~1 --shortstat', { cwd, encoding: 'utf8', timeout: 1200, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        } catch {}
+      }
+      if (!out) {
+        gitStatsCache.set(cwd, { at: now, stats: null });
+        return null;
+      }
+      const mFiles = out.match(/(\d+)\s+file/);
+      const mAdd = out.match(/(\d+)\s+insertion/);
+      const mDel = out.match(/(\d+)\s+deletion/);
+      const stats = {
+        files: mFiles ? Number(mFiles[1]) : 0,
+        additions: mAdd ? Number(mAdd[1]) : 0,
+        deletions: mDel ? Number(mDel[1]) : 0
+      };
+      gitStatsCache.set(cwd, { at: now, stats });
+      return stats;
+    } catch {
+      return null;
+    }
+  }
+
+  function getLastPromptFromTranscript(convId) {
+    if (!convId) return '';
+    const possiblePaths = [
+      path.join('D:/Launchers/AntigravityProfiles/profile_04/user/.gemini/antigravity/brain', convId, '.system_generated', 'logs', 'transcript.jsonl'),
+      path.join(os.homedir(), '.gemini', 'antigravity', 'brain', convId, '.system_generated', 'logs', 'transcript.jsonl')
+    ];
+    for (const p of possiblePaths) {
+      try {
+        if (fs.existsSync(p)) {
+          const stat = fs.statSync(p);
+          const readSize = Math.min(stat.size, 65536);
+          const fd = fs.openSync(p, 'r');
+          const buf = Buffer.alloc(readSize);
+          fs.readSync(fd, buf, 0, readSize, stat.size - readSize);
+          fs.closeSync(fd);
+          const lines = buf.toString('utf8').split('\n');
+          for (let i = lines.length - 1; i >= 0; i--) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            try {
+              const obj = JSON.parse(line);
+              if (obj.type === 'USER_INPUT' && obj.content) {
+                const clean = String(obj.content)
+                  .replace(/<\/?USER_REQUEST>/g, '')
+                  .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
+                  .replace(/PS [A-Z]:\\[^\n]*/g, '')
+                  .replace(/[\r\n]+/g, ' ')
+                  .trim();
+                if (clean) return clean.slice(0, 160);
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+    return '';
+  }
+
   function syncAntigravitySessions() {
     const now = Date.now();
     if (now - lastAntigravityScan < 3000 || antigravityScanning) return;
@@ -124,23 +198,31 @@ function createHub(options = {}) {
           try {
             const { DatabaseSync } = require('node:sqlite');
             const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
-            const rows = db.prepare('SELECT conversation_id, title, preview, step_count, not_fully_idle, workspace_uris, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 8').all();
+            const rows = db.prepare('SELECT conversation_id, title, preview, status, not_fully_idle, workspace_uris, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 8').all();
             for (const row of rows) {
               if (row && row.conversation_id) {
                 const modTime = new Date(row.last_modified_time).getTime();
                 if (now - modTime < ONE_DAY_MS * 4) {
                   const pid = runningProfiles.get(slot) || runningProfiles.get('default') || null;
-                  const isBusy = Boolean(row.not_fully_idle);
+                  const isRunning = row.status === 'CASCADE_RUN_STATUS_RUNNING';
+                  const hasBackground = Boolean(row.not_fully_idle && row.status !== 'CASCADE_RUN_STATUS_RUNNING');
+                  const isBusy = isRunning || hasBackground;
                   let workspaceName = '';
+                  let workspacePath = '';
                   if (row.workspace_uris) {
                     try {
                       const uris = JSON.parse(row.workspace_uris);
                       if (Array.isArray(uris) && uris.length && uris[0]) {
-                        const u = String(uris[0]).replace(/^file:\/\/\/?/i, '').replace(/%3A/gi, ':');
-                        workspaceName = path.basename(decodeURIComponent(u));
+                        let u = String(uris[0]).replace(/^file:\/\/\/?/i, '').replace(/%3A/gi, ':');
+                        if (!/^[a-zA-Z]:/.test(u) && /^\/[a-zA-Z]:/.test(u)) u = u.slice(1);
+                        workspacePath = decodeURIComponent(u);
+                        workspaceName = path.basename(workspacePath);
                       }
                     } catch {}
                   }
+
+                  const prompt = getLastPromptFromTranscript(row.conversation_id) || row.preview || '';
+                  const gitStats = getGitStats(workspacePath);
 
                   if (!sessions.has(row.conversation_id)) {
                     sessions.set(row.conversation_id, {
@@ -152,10 +234,13 @@ function createHub(options = {}) {
                       title: row.title || 'Antigravity ' + slot,
                       project: row.title || 'Antigravity ' + slot,
                       workspace: workspaceName,
-                      stepCount: Number(row.step_count) || 0,
+                      cwd: workspacePath,
+                      prompt,
+                      gitStats,
+                      background: hasBackground,
                       preview: row.preview || '',
                       state: isBusy ? 'running' : 'ready',
-                      detail: isBusy ? 'Antigravity is bezig' : 'Klaar',
+                      detail: isRunning ? 'Antigravity is bezig' : hasBackground ? '1 taak op achtergrond' : 'Klaar',
                       question: '',
                       permission: null,
                       startedAt: isBusy ? (modTime || now) : null,
@@ -167,14 +252,18 @@ function createHub(options = {}) {
                     const existing = sessions.get(row.conversation_id);
                     if (pid && !existing.pid) { existing.pid = pid; existing.windowPid = pid; changedAny = true; }
                     if (!existing.title && row.title) { existing.title = row.title; changedAny = true; }
-                    if (row.step_count && existing.stepCount !== Number(row.step_count)) { existing.stepCount = Number(row.step_count); changedAny = true; }
                     if (workspaceName && !existing.workspace) { existing.workspace = workspaceName; changedAny = true; }
+                    if (workspacePath && !existing.cwd) { existing.cwd = workspacePath; }
+                    if (prompt && !existing.prompt) { existing.prompt = prompt; changedAny = true; }
+                    if (gitStats) { existing.gitStats = gitStats; }
+                    existing.background = hasBackground;
                     if (row.preview && !existing.preview) { existing.preview = row.preview; }
                     if ((!existing.steps || !existing.steps.length) && existing.state !== 'question') {
                       const nextState = isBusy ? 'running' : 'ready';
-                      if (existing.state !== nextState) {
+                      const nextDetail = isRunning ? 'Antigravity is bezig' : hasBackground ? '1 taak op achtergrond' : 'Klaar';
+                      if (existing.state !== nextState || existing.detail !== nextDetail) {
                         existing.state = nextState;
-                        existing.detail = isBusy ? 'Antigravity is bezig' : 'Klaar';
+                        existing.detail = nextDetail;
                         if (isBusy && !existing.startedAt) existing.startedAt = modTime || now;
                         changedAny = true;
                       }
@@ -200,22 +289,29 @@ function createHub(options = {}) {
         if (fs.existsSync(dbPath)) {
           try {
             const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
-            const rows = db.prepare('SELECT conversation_id, title, preview, step_count, not_fully_idle, workspace_uris, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 8').all();
+            const rows = db.prepare('SELECT conversation_id, title, preview, status, not_fully_idle, workspace_uris, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 8').all();
             for (const row of rows) {
               if (row && row.conversation_id && !sessions.has(row.conversation_id)) {
                 const modTime = new Date(row.last_modified_time).getTime();
                 if (now - modTime < ONE_DAY_MS * 4) {
-                  const isBusy = Boolean(row.not_fully_idle);
+                  const isRunning = row.status === 'CASCADE_RUN_STATUS_RUNNING';
+                  const hasBackground = Boolean(row.not_fully_idle && row.status !== 'CASCADE_RUN_STATUS_RUNNING');
+                  const isBusy = isRunning || hasBackground;
                   let workspaceName = '';
+                  let workspacePath = '';
                   if (row.workspace_uris) {
                     try {
                       const uris = JSON.parse(row.workspace_uris);
                       if (Array.isArray(uris) && uris.length && uris[0]) {
-                        const u = String(uris[0]).replace(/^file:\/\/\/?/i, '').replace(/%3A/gi, ':');
-                        workspaceName = path.basename(decodeURIComponent(u));
+                        let u = String(uris[0]).replace(/^file:\/\/\/?/i, '').replace(/%3A/gi, ':');
+                        if (!/^[a-zA-Z]:/.test(u) && /^\/[a-zA-Z]:/.test(u)) u = u.slice(1);
+                        workspacePath = decodeURIComponent(u);
+                        workspaceName = path.basename(workspacePath);
                       }
                     } catch {}
                   }
+                  const prompt = getLastPromptFromTranscript(row.conversation_id) || row.preview || '';
+                  const gitStats = getGitStats(workspacePath);
                   sessions.set(row.conversation_id, {
                     id: row.conversation_id,
                     agent: 'antigravity',
@@ -223,10 +319,13 @@ function createHub(options = {}) {
                     title: row.title || 'Antigravity ' + slot,
                     project: row.title || 'Antigravity ' + slot,
                     workspace: workspaceName,
-                    stepCount: Number(row.step_count) || 0,
+                    cwd: workspacePath,
+                    prompt,
+                    gitStats,
+                    background: hasBackground,
                     preview: row.preview || '',
                     state: isBusy ? 'running' : 'ready',
-                    detail: isBusy ? 'Antigravity is bezig' : 'Klaar',
+                    detail: isRunning ? 'Antigravity is bezig' : hasBackground ? '1 taak op achtergrond' : 'Klaar',
                     question: '',
                     permission: null,
                     startedAt: isBusy ? (modTime || now) : null,
@@ -669,7 +768,10 @@ function createHub(options = {}) {
       elapsed: s.startedAt ? Math.floor(((s.endedAt || now) - s.startedAt) / 1000) : 0,
       stepCount: s.stepCount || 0,
       workspace: s.workspace || '',
-      preview: s.preview || '' });
+      preview: s.preview || '',
+      prompt: s.prompt || '',
+      gitStats: s.gitStats || null,
+      background: Boolean(s.background) });
     if (!top) return { ...base, connected: true, state: 'ready', detail: 'Wacht op ' + who.name, question: '', elapsed: 0, list: [] };
     return { ...base, connected: true, state: top.state, detail: top.detail, question: top.question, elapsed: item(top).elapsed,
       sessionId: top.id, title: top.title || top.project || who.name, lastMessage: top.lastMessage || '', ask: waiting.has(top.id) ? top.ask || null : null,
@@ -677,7 +779,9 @@ function createHub(options = {}) {
       source: { process: who.name, title: top.title || top.project }, list: list.slice(0, 8).map(item),
       stepCount: top.stepCount || 0,
       workspace: top.workspace || '',
-      preview: top.preview || '' };
+      preview: top.preview || '',
+      gitStats: top.gitStats || null,
+      background: Boolean(top.background) };
   }
   const pidOf = sessionId => sessions.get(sessionId)?.pid || null;
   // The window was closed: learn it again from the next hook.
