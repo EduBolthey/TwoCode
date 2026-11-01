@@ -114,6 +114,7 @@ process.stdin.on('end', () => {
   const hookPayload = {
     session_id: sessionId,
     hook_event_name: eventName,
+    pid: process.ppid,
     cwd,
     title,
     prompt,

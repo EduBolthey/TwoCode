@@ -95,40 +95,41 @@ function createHub(options = {}) {
     return dbs;
   }
 
-  let gitStatsCache = new Map(); // cwd -> { at, stats }
+  let gitStatsCache = new Map(); // cwd -> { at, stats, fetching }
   function getGitStats(cwd) {
     if (!cwd || typeof cwd !== 'string') return null;
     const now = Date.now();
     const cached = gitStatsCache.get(cwd);
-    if (cached && (now - cached.at < 3000)) return cached.stats;
-    try {
+    if (cached && (now - cached.at < 60000)) return cached.stats;
+    if (!cached || !cached.fetching) {
+      gitStatsCache.set(cwd, { at: now, stats: cached?.stats || null, fetching: true });
       const cp = require('node:child_process');
-      let out = '';
-      try {
-        out = cp.execSync('git diff --shortstat', { cwd, encoding: 'utf8', timeout: 1200, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-      } catch {}
-      if (!out) {
-        try {
-          out = cp.execSync('git diff HEAD~1 --shortstat', { cwd, encoding: 'utf8', timeout: 1200, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-        } catch {}
-      }
-      if (!out) {
-        gitStatsCache.set(cwd, { at: now, stats: null });
-        return null;
-      }
-      const mFiles = out.match(/(\d+)\s+file/);
-      const mAdd = out.match(/(\d+)\s+insertion/);
-      const mDel = out.match(/(\d+)\s+deletion/);
-      const stats = {
-        files: mFiles ? Number(mFiles[1]) : 0,
-        additions: mAdd ? Number(mAdd[1]) : 0,
-        deletions: mDel ? Number(mDel[1]) : 0
-      };
-      gitStatsCache.set(cwd, { at: now, stats });
-      return stats;
-    } catch {
-      return null;
+      cp.exec('git diff --shortstat', { cwd, encoding: 'utf8', timeout: 2000 }, (err, stdout) => {
+        let out = (stdout || '').trim();
+        const finish = text => {
+          let stats = null;
+          if (text) {
+            const mFiles = text.match(/(\d+)\s+file/);
+            const mAdd = text.match(/(\d+)\s+insertion/);
+            const mDel = text.match(/(\d+)\s+deletion/);
+            stats = {
+              files: mFiles ? Number(mFiles[1]) : 0,
+              additions: mAdd ? Number(mAdd[1]) : 0,
+              deletions: mDel ? Number(mDel[1]) : 0
+            };
+          }
+          gitStatsCache.set(cwd, { at: Date.now(), stats, fetching: false });
+        };
+        if (!out) {
+          cp.exec('git diff HEAD~1 --shortstat', { cwd, encoding: 'utf8', timeout: 2000 }, (err2, stdout2) => {
+            finish((stdout2 || '').trim());
+          });
+        } else {
+          finish(out);
+        }
+      });
     }
+    return cached?.stats || null;
   }
 
   function getLastPromptFromTranscript(convId) {
@@ -171,26 +172,11 @@ function createHub(options = {}) {
 
   function syncAntigravitySessions() {
     const now = Date.now();
-    if (now - lastAntigravityScan < 3000 || antigravityScanning) return;
+    if (now - lastAntigravityScan < 20000 || antigravityScanning) return;
     lastAntigravityScan = now;
     antigravityScanning = true;
 
-    const cp = require('node:child_process');
-    cp.exec('powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name = \'Antigravity.exe\'\\" | Where-Object { $_.CommandLine -notlike \'*--type=*\' } | Select-Object ProcessId, CommandLine | ConvertTo-Json"', { timeout: 3000 }, (err, stdout) => {
-      antigravityScanning = false;
-      const runningProfiles = new Map();
-      if (!err && stdout && stdout.trim()) {
-        try {
-          const parsed = JSON.parse(stdout);
-          const list = Array.isArray(parsed) ? parsed : [parsed];
-          for (const item of list) {
-            const m = (item.CommandLine || '').match(/--profile-slot=(\w+)/);
-            const slot = m ? m[1] : 'default';
-            runningProfiles.set(slot, item.ProcessId);
-          }
-        } catch {}
-      }
-
+    try {
       let changedAny = false;
       const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -204,10 +190,7 @@ function createHub(options = {}) {
               if (row && row.conversation_id) {
                 const modTime = new Date(row.last_modified_time).getTime();
                 if (now - modTime < ONE_DAY_MS * 4) {
-                  const pid = runningProfiles.get(slot) || runningProfiles.get('default') || null;
-                  const isRunning = row.status === 'CASCADE_RUN_STATUS_RUNNING';
                   const hasBackground = Boolean(row.not_fully_idle && row.status !== 'CASCADE_RUN_STATUS_RUNNING');
-                  const isBusy = isRunning || hasBackground;
                   let workspaceName = '';
                   let workspacePath = '';
                   if (row.workspace_uris) {
@@ -222,22 +205,18 @@ function createHub(options = {}) {
                     } catch {}
                   }
 
-                  const prompt = getLastPromptFromTranscript(row.conversation_id) || row.preview || '';
-                  const gitStats = getGitStats(workspacePath);
-
                   if (!sessions.has(row.conversation_id)) {
+                    const prompt = getLastPromptFromTranscript(row.conversation_id) || row.preview || '';
                     sessions.set(row.conversation_id, {
                       id: row.conversation_id,
                       agent: 'antigravity',
                       slot,
-                      pid,
-                      windowPid: pid,
                       title: row.title || 'Antigravity ' + slot,
                       project: row.title || 'Antigravity ' + slot,
                       workspace: workspaceName,
                       cwd: workspacePath,
                       prompt,
-                      gitStats,
+                      gitStats: null,
                       background: hasBackground,
                       preview: row.preview || '',
                       state: 'ready',
@@ -251,12 +230,13 @@ function createHub(options = {}) {
                     changedAny = true;
                   } else {
                     const existing = sessions.get(row.conversation_id);
-                    if (pid && !existing.pid) { existing.pid = pid; existing.windowPid = pid; changedAny = true; }
                     if (!existing.title && row.title) { existing.title = row.title; changedAny = true; }
                     if (workspaceName && !existing.workspace) { existing.workspace = workspaceName; changedAny = true; }
                     if (workspacePath && !existing.cwd) { existing.cwd = workspacePath; }
-                    if (prompt && !existing.prompt) { existing.prompt = prompt; changedAny = true; }
-                    if (gitStats) { existing.gitStats = gitStats; }
+                    if (!existing.prompt) {
+                      const p = getLastPromptFromTranscript(row.conversation_id) || row.preview || '';
+                      if (p) { existing.prompt = p; changedAny = true; }
+                    }
                     existing.background = hasBackground;
                     if (row.preview && !existing.preview) { existing.preview = row.preview; }
                   }
@@ -267,11 +247,11 @@ function createHub(options = {}) {
         }
       }
 
-      // Inactivity watchdog: if an Antigravity session is marked running but has had no hook for > 15 seconds, mark it done
+      // Inactivity watchdog: if an Antigravity session is marked running but has had no hook for > 30 seconds, mark it done
       for (const s of sessions.values()) {
         if (s.agent === 'antigravity' && s.state === 'running') {
           const lastActive = s.lastHookAt || s.updatedAt || s.startedAt;
-          if (lastActive && (now - lastActive > 15000)) {
+          if (lastActive && (now - lastActive > 30000)) {
             s.state = 'done';
             s.endedAt = lastActive;
             s.detail = 'Klaar';
@@ -284,7 +264,9 @@ function createHub(options = {}) {
       }
 
       if (changedAny) onChange();
-    });
+    } finally {
+      antigravityScanning = false;
+    }
   }
 
   function initAntigravitySessionsSync() {
@@ -318,7 +300,6 @@ function createHub(options = {}) {
                     } catch {}
                   }
                   const prompt = getLastPromptFromTranscript(row.conversation_id) || row.preview || '';
-                  const gitStats = getGitStats(workspacePath);
                   sessions.set(row.conversation_id, {
                     id: row.conversation_id,
                     agent: 'antigravity',
@@ -328,7 +309,7 @@ function createHub(options = {}) {
                     workspace: workspaceName,
                     cwd: workspacePath,
                     prompt,
-                    gitStats,
+                    gitStats: null,
                     background: hasBackground,
                     preview: row.preview || '',
                     state: 'ready',
@@ -348,6 +329,7 @@ function createHub(options = {}) {
     } catch {}
   }
   initAntigravitySessionsSync();
+  setInterval(syncAntigravitySessions, 20000).unref?.();
 
   function token() {
     const file = path.join(userData, 'claude-code-hook-token');
@@ -585,6 +567,7 @@ function createHub(options = {}) {
     const s = sessions.get(id) || { id, agent, state: 'ready', detail: '', question: '', permission: null, startedAt: null, endedAt: null, updatedAt: now };
     s.agent = agent;
     s.lastHookAt = now;
+    if (event.pid) learnPid(s, event.pid);
     if (typeof event.cwd === 'string') { s.project = path.basename(event.cwd); s.cwd = event.cwd; }
     if (event.title) s.title = event.title;
     if (event.model) s.modelName = event.model;
@@ -602,8 +585,7 @@ function createHub(options = {}) {
       case 'PreInvocation': {
         const cleanPrompt = String(event.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 240);
         const isNewPrompt = Boolean(cleanPrompt && s.prompt && cleanPrompt !== s.prompt);
-        const isFirstInvocation = event.invocation_num === 1;
-        const isTurnStart = !s.startedAt || s.endedAt !== null || s.state !== 'running' || isNewPrompt || isFirstInvocation;
+        const isTurnStart = !s.startedAt || s.state !== 'running' || isNewPrompt;
 
         s.state = 'running';
         s.endedAt = null;
@@ -722,7 +704,13 @@ function createHub(options = {}) {
         }
         break;
       }
-      case 'PostInvocation':
+      case 'PostInvocation': {
+        // Tool execution completed; model continues reasoning/generating
+        for (const step of s.steps || []) if (step.state === 'running') step.state = 'done';
+        s.state = 'running';
+        s.detail = 'Denkt na...';
+        break;
+      }
       case 'Stop': {
         const question = questionFrom(String(event.last_assistant_message || ''));
         s.endedAt = now; s.state = question ? 'question' : 'done'; s.permission = null; s.ask = null; s.plan = null;
@@ -789,7 +777,6 @@ function createHub(options = {}) {
   // One entry for the island: the session that needs you most first.
   let codexCache = false, codexThere = false;
   function view(agent = 'claude') {
-    if (agent === 'antigravity') syncAntigravitySessions();
     const who = AGENTS[agent] || AGENTS.antigravity || AGENTS.claude;
     const list = [...sessions.values()].filter(s => (s.agent || 'claude') === agent).sort((a, b) => (RANK[b.state] - RANK[a.state]) || (b.updatedAt - a.updatedAt));
     const now = Date.now();
@@ -815,6 +802,7 @@ function createHub(options = {}) {
       gitStats: s.gitStats || null,
       background: Boolean(s.background) });
     if (!top) return { ...base, connected: true, state: 'ready', detail: 'Wacht op ' + who.name, question: '', elapsed: 0, list: [] };
+    const activeGitStats = (top.cwd ? getGitStats(top.cwd) : null) || top.gitStats || null;
     return { ...base, connected: true, state: top.state, detail: top.detail, question: top.question, elapsed: item(top).elapsed,
       sessionId: top.id, title: top.title || top.project || who.name, lastMessage: top.lastMessage || '', ask: waiting.has(top.id) ? top.ask || null : null,
       plan: waiting.has(top.id) ? top.plan || null : null, stats: top.stats || {}, steps: (top.steps || []).slice(-8), prompt: top.prompt || '', files: (top.files || []).slice(-8), commands: (top.commands || []).slice(-3), code: top.code || null, run: top.run || null, canJump: Boolean(top.pid), canReply: replies.has(top.id) && !waiting.has(top.id), permission: top.permission && waiting.has(top.id) ? top.permission : null,
@@ -822,7 +810,7 @@ function createHub(options = {}) {
       stepCount: top.stepCount || 0,
       workspace: top.workspace || '',
       preview: top.preview || '',
-      gitStats: top.gitStats || null,
+      gitStats: activeGitStats,
       background: Boolean(top.background) };
   }
   const pidOf = sessionId => sessions.get(sessionId)?.pid || null;
