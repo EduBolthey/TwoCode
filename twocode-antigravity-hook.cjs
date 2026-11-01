@@ -11,12 +11,37 @@ const ROUTE = '/twocode-hook';
 const eventName = process.argv[2] || 'PreToolUse';
 
 function getToken() {
-  const tokenFile = path.join(os.homedir(), 'AppData', 'Roaming', 'twocode-assistent-electron', 'claude-code-hook-token');
-  try {
-    return fs.readFileSync(tokenFile, 'utf8').trim();
-  } catch {
-    return '';
+  const candidates = [];
+  const winUser = process.env.USERNAME || process.env.USER || '';
+  if (winUser) {
+    candidates.push(path.join('C:', 'Users', winUser, 'AppData', 'Roaming', 'twocode-assistent-electron', 'claude-code-hook-token'));
   }
+  if (process.env.APPDATA) {
+    candidates.push(path.join(process.env.APPDATA, 'twocode-assistent-electron', 'claude-code-hook-token'));
+  }
+  try {
+    const usersDir = 'C:\\Users';
+    if (fs.existsSync(usersDir)) {
+      for (const u of fs.readdirSync(usersDir)) {
+        if (!['Public', 'Default', 'Default User', 'All Users'].includes(u)) {
+          candidates.push(path.join(usersDir, u, 'AppData', 'Roaming', 'twocode-assistent-electron', 'claude-code-hook-token'));
+        }
+      }
+    }
+  } catch {}
+  candidates.push(path.join(os.homedir(), 'AppData', 'Roaming', 'twocode-assistent-electron', 'claude-code-hook-token'));
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const val = fs.readFileSync(p, 'utf8').trim();
+        if (/^[a-f0-9]{48}$/.test(val)) {
+          return val;
+        }
+      }
+    } catch {}
+  }
+  return '';
 }
 
 function getConversationTitle(conversationId, artifactDir, lastUserInput) {

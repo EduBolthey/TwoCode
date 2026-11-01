@@ -124,12 +124,24 @@ function createHub(options = {}) {
           try {
             const { DatabaseSync } = require('node:sqlite');
             const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
-            const rows = db.prepare('SELECT conversation_id, title, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 2').all();
+            const rows = db.prepare('SELECT conversation_id, title, preview, step_count, not_fully_idle, workspace_uris, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 8').all();
             for (const row of rows) {
               if (row && row.conversation_id) {
                 const modTime = new Date(row.last_modified_time).getTime();
-                if (now - modTime < ONE_DAY_MS * 2) {
+                if (now - modTime < ONE_DAY_MS * 4) {
                   const pid = runningProfiles.get(slot) || runningProfiles.get('default') || null;
+                  const isBusy = Boolean(row.not_fully_idle);
+                  let workspaceName = '';
+                  if (row.workspace_uris) {
+                    try {
+                      const uris = JSON.parse(row.workspace_uris);
+                      if (Array.isArray(uris) && uris.length && uris[0]) {
+                        const u = String(uris[0]).replace(/^file:\/\/\/?/i, '').replace(/%3A/gi, ':');
+                        workspaceName = path.basename(decodeURIComponent(u));
+                      }
+                    } catch {}
+                  }
+
                   if (!sessions.has(row.conversation_id)) {
                     sessions.set(row.conversation_id, {
                       id: row.conversation_id,
@@ -139,12 +151,15 @@ function createHub(options = {}) {
                       windowPid: pid,
                       title: row.title || 'Antigravity ' + slot,
                       project: row.title || 'Antigravity ' + slot,
-                      state: 'ready',
-                      detail: 'Klaar voor je vraag',
+                      workspace: workspaceName,
+                      stepCount: Number(row.step_count) || 0,
+                      preview: row.preview || '',
+                      state: isBusy ? 'running' : 'ready',
+                      detail: isBusy ? 'Antigravity is bezig' : 'Klaar',
                       question: '',
                       permission: null,
-                      startedAt: null,
-                      endedAt: null,
+                      startedAt: isBusy ? (modTime || now) : null,
+                      endedAt: isBusy ? null : modTime,
                       updatedAt: modTime || now
                     });
                     changedAny = true;
@@ -152,6 +167,18 @@ function createHub(options = {}) {
                     const existing = sessions.get(row.conversation_id);
                     if (pid && !existing.pid) { existing.pid = pid; existing.windowPid = pid; changedAny = true; }
                     if (!existing.title && row.title) { existing.title = row.title; changedAny = true; }
+                    if (row.step_count && existing.stepCount !== Number(row.step_count)) { existing.stepCount = Number(row.step_count); changedAny = true; }
+                    if (workspaceName && !existing.workspace) { existing.workspace = workspaceName; changedAny = true; }
+                    if (row.preview && !existing.preview) { existing.preview = row.preview; }
+                    if ((!existing.steps || !existing.steps.length) && existing.state !== 'question') {
+                      const nextState = isBusy ? 'running' : 'ready';
+                      if (existing.state !== nextState) {
+                        existing.state = nextState;
+                        existing.detail = isBusy ? 'Antigravity is bezig' : 'Klaar';
+                        if (isBusy && !existing.startedAt) existing.startedAt = modTime || now;
+                        changedAny = true;
+                      }
+                    }
                   }
                 }
               }
@@ -173,23 +200,37 @@ function createHub(options = {}) {
         if (fs.existsSync(dbPath)) {
           try {
             const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
-            const rows = db.prepare('SELECT conversation_id, title, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 2').all();
+            const rows = db.prepare('SELECT conversation_id, title, preview, step_count, not_fully_idle, workspace_uris, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 8').all();
             for (const row of rows) {
               if (row && row.conversation_id && !sessions.has(row.conversation_id)) {
                 const modTime = new Date(row.last_modified_time).getTime();
-                if (now - modTime < ONE_DAY_MS * 2) {
+                if (now - modTime < ONE_DAY_MS * 4) {
+                  const isBusy = Boolean(row.not_fully_idle);
+                  let workspaceName = '';
+                  if (row.workspace_uris) {
+                    try {
+                      const uris = JSON.parse(row.workspace_uris);
+                      if (Array.isArray(uris) && uris.length && uris[0]) {
+                        const u = String(uris[0]).replace(/^file:\/\/\/?/i, '').replace(/%3A/gi, ':');
+                        workspaceName = path.basename(decodeURIComponent(u));
+                      }
+                    } catch {}
+                  }
                   sessions.set(row.conversation_id, {
                     id: row.conversation_id,
                     agent: 'antigravity',
                     slot,
                     title: row.title || 'Antigravity ' + slot,
                     project: row.title || 'Antigravity ' + slot,
-                    state: 'ready',
-                    detail: 'Klaar voor je vraag',
+                    workspace: workspaceName,
+                    stepCount: Number(row.step_count) || 0,
+                    preview: row.preview || '',
+                    state: isBusy ? 'running' : 'ready',
+                    detail: isBusy ? 'Antigravity is bezig' : 'Klaar',
                     question: '',
                     permission: null,
-                    startedAt: null,
-                    endedAt: null,
+                    startedAt: isBusy ? (modTime || now) : null,
+                    endedAt: isBusy ? null : modTime,
                     updatedAt: modTime || now
                   });
                 }
@@ -606,7 +647,7 @@ function createHub(options = {}) {
 
   // One entry for the island: the session that needs you most first.
   let codexCache = false, codexThere = false;
-  function view(agent = 'antigravity') {
+  function view(agent = 'claude') {
     if (agent === 'antigravity') syncAntigravitySessions();
     const who = AGENTS[agent] || AGENTS.antigravity || AGENTS.claude;
     const list = [...sessions.values()].filter(s => (s.agent || 'claude') === agent).sort((a, b) => (RANK[b.state] - RANK[a.state]) || (b.updatedAt - a.updatedAt));
@@ -625,12 +666,18 @@ function createHub(options = {}) {
     if (!hooks || !listening) return { ...base, connected: false, state: 'disconnected', detail: hooks ? 'Niet actief' : 'Niet gekoppeld', question: '', elapsed: 0, list: [] };
     const item = s => ({ id: s.id, title: s.title || s.project || who.name, project: s.title || s.project || who.name, state: s.state, detail: s.detail,
       active: Boolean(top && s.id === top.id),
-      elapsed: s.startedAt ? Math.floor(((s.endedAt || now) - s.startedAt) / 1000) : 0 });
+      elapsed: s.startedAt ? Math.floor(((s.endedAt || now) - s.startedAt) / 1000) : 0,
+      stepCount: s.stepCount || 0,
+      workspace: s.workspace || '',
+      preview: s.preview || '' });
     if (!top) return { ...base, connected: true, state: 'ready', detail: 'Wacht op ' + who.name, question: '', elapsed: 0, list: [] };
     return { ...base, connected: true, state: top.state, detail: top.detail, question: top.question, elapsed: item(top).elapsed,
       sessionId: top.id, title: top.title || top.project || who.name, lastMessage: top.lastMessage || '', ask: waiting.has(top.id) ? top.ask || null : null,
       plan: waiting.has(top.id) ? top.plan || null : null, stats: top.stats || {}, steps: (top.steps || []).slice(-8), prompt: top.prompt || '', files: (top.files || []).slice(-8), commands: (top.commands || []).slice(-3), code: top.code || null, run: top.run || null, canJump: Boolean(top.pid), canReply: replies.has(top.id) && !waiting.has(top.id), permission: top.permission && waiting.has(top.id) ? top.permission : null,
-      source: { process: who.name, title: top.title || top.project }, list: list.slice(0, 8).map(item) };
+      source: { process: who.name, title: top.title || top.project }, list: list.slice(0, 8).map(item),
+      stepCount: top.stepCount || 0,
+      workspace: top.workspace || '',
+      preview: top.preview || '' };
   }
   const pidOf = sessionId => sessions.get(sessionId)?.pid || null;
   // The window was closed: learn it again from the next hook.

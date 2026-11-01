@@ -554,15 +554,15 @@
 #twocode-ai-monitor.cl-new .gl-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:none}
 #twocode-ai-monitor.cl-new .gl-note{flex:none;margin-top:8px;height:32px;border:0;border-radius:10px;background:rgba(255,255,255,.13);color:#fff;padding:0 12px;font:13px Inter,"Segoe UI",sans-serif;outline:none}
 #twocode-ai-monitor.cc-antigravity .gl-tile > .gl-ico{background:linear-gradient(150deg,#1a73e8,#4285f4)}
-#twocode-ai-monitor .am-capsules{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent;padding:2px 2px 6px;margin-bottom:2px;flex:none;scroll-behavior:smooth}
+#twocode-ai-monitor .am-capsules{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent;padding:2px 2px 6px;margin-bottom:2px;flex:none}
 #twocode-ai-monitor .am-capsules::-webkit-scrollbar{height:3px}
 #twocode-ai-monitor .am-capsules::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
 #twocode-ai-monitor .am-capsules::-webkit-scrollbar-track{background:transparent}
 #twocode-ai-monitor .am-capsule{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.75);font:600 11px Inter,"Segoe UI",sans-serif;cursor:pointer;white-space:nowrap;flex:none;max-width:180px;transition:all .2s ease}
 #twocode-ai-monitor .am-capsule:hover{background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.24)}
 #twocode-ai-monitor .am-capsule.active{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.38);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
-#twocode-ai-monitor .am-cap-dot{width:6px;height:6px;border-radius:50%;background:var(--lamp,#30d158);box-shadow:0 0 6px var(--lamp,#30d158);flex:none}
-#twocode-ai-monitor .am-cap-dot.blink{animation:am-pulse 1.2s ease-in-out infinite}
+#twocode-ai-monitor .am-cap-dot{width:6px;height:6px;border-radius:50%;background:var(--lamp,rgba(255,255,255,.45));box-shadow:0 0 5px var(--lamp,transparent);flex:none;transition:background .2s,box-shadow .2s}
+#twocode-ai-monitor .am-cap-dot.blink{animation:am-pulse 1.1s ease-in-out infinite;box-shadow:0 0 8px var(--lamp,#30d158)}
 #twocode-ai-monitor .am-cap-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 #twocode-ai-monitor .am-cap-time{font-size:10px;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;flex:none}
 #twocode-ai-monitor.cl-new .gl-tasks-scroll{flex:1;min-height:0;max-height:102px;overflow-y:auto;overflow-x:hidden;padding-right:3px;margin-top:2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
@@ -647,6 +647,7 @@
     const p = current(), input = root.querySelector('textarea');
     const focused = Boolean(input && input === document.activeElement), start = input?.selectionStart, end = input?.selectionEnd;
     const sub = p?.kind === 'hooks' ? (p.connected ? (p.source?.title ? `Project: ${p.source.title}` : `Volgt al je ${p.name}-sessies`) : 'Nog niet gekoppeld') : '';
+    const savedCapsulesScrollLeft = root.querySelector('.am-capsules')?.scrollLeft;
     root.innerHTML = p?.kind === 'hooks' ? `<div class="am-shell">${hooksPage(p, sub)}${error ? `<div class="am-error" role="alert">${escape(error)}</div>` : ''}</div>`
       : `<div class="am-shell"><div class="tc-page-head"><div><p class="tc-page-title">${escape(p?.name || 'Claude Code')}</p><p class="tc-page-sub">${escape(sub)}</p></div><button type="button" id="am-small">Klein</button></div>${
       choosing ? `<div class="am-hint">Open ${escape(names[selected])} in je browser of desktopapp en log daar in. Laat het gesprek open in een eigen venster. Kies daarna dat venster.</div><div class="am-body">${windows.length ? windows.map((win, index) => `<button type="button" class="am-window" data-window="${index}" ${pending ? 'disabled' : ''}>${escape(win.title)} <span class="am-hint">· ${escape(win.process)}</span></button>`).join('') : '<div class="am-hint">Nog geen geschikt venster gevonden. Houd een websitegesprek in een eigen venster.</div>'}</div><div class="am-row"><button type="button" id="am-launch">Open ${escape(names[selected])}</button><button type="button" id="am-scan" ${pending ? 'disabled' : ''}>Vernieuwen</button><button type="button" id="am-cancel">Terug</button></div>` :
@@ -691,12 +692,24 @@
 
     const capsulesEl = root.querySelector('.am-capsules');
     if (capsulesEl) {
+      if (savedCapsulesScrollLeft != null && savedCapsulesScrollLeft > 0) {
+        capsulesEl.scrollLeft = savedCapsulesScrollLeft;
+      }
       capsulesEl.addEventListener('wheel', e => {
         if (e.deltaY) {
           e.preventDefault();
           capsulesEl.scrollLeft += e.deltaY;
         }
       }, { passive: false });
+
+      const activeCap = capsulesEl.querySelector('.am-capsule.active');
+      if (activeCap) {
+        const left = activeCap.offsetLeft - capsulesEl.offsetLeft;
+        const right = left + activeCap.offsetWidth;
+        if (left < capsulesEl.scrollLeft || right > capsulesEl.scrollLeft + capsulesEl.clientWidth) {
+          activeCap.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+      }
     }
 
     const updateMarquees = () => {
@@ -857,12 +870,16 @@
     // on the island). Left one big thing (the time, or how many jobs today), right a frosted card with what happens now
     // (the code, the terminal, the steps, his answer, his question); at the bottom how far he is. ----
     const capsules = (p.list && p.list.length > 1)
-      ? `<div class="am-capsules">${p.list.map(item => `
+      ? `<div class="am-capsules">${p.list.map(item => {
+          const isWorking = item.state === 'running' || item.state === 'sending';
+          const capDotColor = isWorking ? '#30d158' : (item.state === 'error' ? '#ff3b3b' : (item.state === 'question' ? '#ff9a1f' : 'rgba(255,255,255,.45)'));
+          return `
           <button type="button" class="am-capsule ${item.active ? 'active' : ''}" data-sid="${escape(item.id)}" title="${escape(item.title || item.project)}">
-            <i class="am-cap-dot ${item.state === 'running' ? 'blink' : ''}" style="--lamp:${colourOf(item.state)}"></i>
+            <i class="am-cap-dot ${isWorking ? 'blink' : ''}" style="--lamp:${capDotColor}"></i>
             <span class="am-cap-name">${escape(item.title || item.project)}</span>
             ${item.elapsed ? `<span class="am-cap-time">${clock(item.elapsed)}</span>` : ''}
-          </button>`).join('')}</div>`
+          </button>`;
+        }).join('')}</div>`
       : '';
     const steps = p.steps || [], working = busy(p), failed = ['error', 'stopped'].includes(st);
     const idle = !working && !p.prompt && !['done', 'question', 'error', 'stopped'].includes(st);
@@ -895,7 +912,10 @@
     const RES = { done: ['ok', CHECK], question: ['ask', '?'], error: ['bad', '!'], stopped: ['bad', '!'] };
     let big, word = false, sub, card;
     if (idle) {
-      big = String(today); sub = T(today === 1 ? 'klus gedaan vandaag' : 'klussen gedaan vandaag', today === 1 ? 'job done today' : 'jobs done today');
+      big = p.stepCount ? `${p.stepCount}` : String(today);
+      sub = p.stepCount
+        ? (p.workspace ? `stappen · ${escape(p.workspace)}` : T('stappen voltooid', 'steps completed'))
+        : T(today === 1 ? 'klus gedaan vandaag' : 'klussen gedaan vandaag', today === 1 ? 'job done today' : 'jobs done today');
       const pastDistinct = [];
       for (const h of past) {
         if (!pastDistinct.some(x => x.prompt === h.prompt || (x.project && x.project === h.project))) {
@@ -903,9 +923,14 @@
         }
         if (pastDistinct.length >= 25) break;
       }
-      card = pastDistinct.length ? `<p class="gl-cap">${T('Laatst gedaan', 'Recently')}</p><div class="gl-tasks-scroll">` + pastDistinct.map(h => { const [cls, g] = RES[h.result] || ['', '•'];
-        return `<div class="gl-row h" title="${escape(h.prompt)}"><i class="gl-dot ${cls}">${g}</i><b>${escape(h.prompt)}</b><em>${escape(new Date(h.at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))}</em></div>`; }).join('') + `</div>`
-        : `<div class="gl-empty">${T(`Geef ${escape(p.name)} een klus in ${p.agent === 'antigravity' ? 'Antigravity' : 'je terminal'}. Hier zie je dan live wat hij doet: de code, de tests en zijn antwoord.`, `Give ${escape(p.name)} a job in ${p.agent === 'antigravity' ? 'Antigravity' : 'your terminal'}. You'll see what it does here, live: the code, the tests and its answer.`)}</div>`;
+      const sessionSummary = p.lastMessage || p.preview || (p.prompt && p.prompt !== where ? p.prompt : '');
+      if (sessionSummary && sessionSummary !== where && (p.stepCount || p.workspace)) {
+        card = `<p class="gl-cap">${escape(where)}</p><div class="gl-tasks-scroll"><div class="gl-md md" style="font-size:12px;line-height:16px">${md(sessionSummary)}</div></div>`;
+      } else {
+        card = pastDistinct.length ? `<p class="gl-cap">${T('Laatst gedaan', 'Recently')}</p><div class="gl-tasks-scroll">` + pastDistinct.map(h => { const [cls, g] = RES[h.result] || ['', '•'];
+          return `<div class="gl-row h" title="${escape(h.prompt)}"><i class="gl-dot ${cls}">${g}</i><b>${escape(h.prompt)}</b><em>${escape(new Date(h.at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))}</em></div>`; }).join('') + `</div>`
+          : `<div class="gl-empty">${T(`Geef ${escape(p.name)} een klus in ${p.agent === 'antigravity' ? 'Antigravity' : 'je terminal'}. Hier zie je dan live wat hij doet: de code, de tests en zijn antwoord.`, `Give ${escape(p.name)} a job in ${p.agent === 'antigravity' ? 'Antigravity' : 'your terminal'}. You'll see what it does here, live: the code, the tests and its answer.`)}</div>`;
+      }
     } else if (st === 'question') {
       big = T('Jouw beurt', 'Your turn'); word = true; sub = T(p.name + ' wacht op je antwoord', p.name + ' is waiting for you');
       card = `<div class="gl-md md">${md(p.question || p.lastMessage || T(p.name + ' heeft je nodig.', p.name + ' needs you.'))}</div>`;
