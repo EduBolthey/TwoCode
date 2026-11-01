@@ -29,7 +29,18 @@
     clock(c) { c.beginPath(); c.arc(12, 12, 8.5, 0, Math.PI * 2); c.fill(); c.stroke(); c.beginPath(); c.moveTo(12, 7.5); c.lineTo(12, 12); c.lineTo(15, 14); c.stroke(); },
     collapse(c) { c.beginPath(); c.arc(12, 12, 8.5, 0, Math.PI * 2); c.fill(); c.stroke(); c.beginPath(); c.moveTo(8, 13.5); c.lineTo(12, 9.5); c.lineTo(16, 13.5); c.stroke(); },
     tray(c) { c.beginPath(); c.moveTo(4, 13); c.lineTo(7, 5); c.lineTo(17, 5); c.lineTo(20, 13); c.lineTo(20, 19); c.lineTo(4, 19); c.closePath(); c.fill(); c.stroke();
-      c.beginPath(); c.moveTo(4, 13); c.lineTo(9, 13); c.lineTo(10, 15); c.lineTo(14, 15); c.lineTo(15, 13); c.lineTo(20, 13); c.stroke(); }
+      c.beginPath(); c.moveTo(4, 13); c.lineTo(9, 13); c.lineTo(10, 15); c.lineTo(14, 15); c.lineTo(15, 13); c.lineTo(20, 13); c.stroke(); },
+    antigravity(c) {
+      c.beginPath();
+      c.moveTo(12, 2.5);
+      c.quadraticCurveTo(12, 12, 21.5, 12);
+      c.quadraticCurveTo(12, 12, 12, 21.5);
+      c.quadraticCurveTo(12, 12, 2.5, 12);
+      c.quadraticCurveTo(12, 12, 12, 2.5);
+      c.closePath();
+      c.fill();
+      c.stroke();
+    }
   };
   // Old glyphs used by pill(...) calls → icon names.
   const GLYPHS = { '♫': 'music', '›_': 'terminal', '◔': 'timer', '📥': 'tray', '⚙': 'gear', '⌂': 'home', '+': 'plus' };
@@ -76,7 +87,7 @@
   // ---- The frame of the big island, compact like a notch app: the page name left, Robo's eyes + date and time in the
   // middle, ⋯ right. ‹ › on the sides go to the page before / after. At the bottom: Robo's chat left, the speaker right
   // (point at it and it becomes a volume slider) and dots in the middle that turn into a row of tabs when you point at them. ----
-  const TITLES = { chat: ['Robo', 'Robo'], spotify: ['Muziek', 'Music'], monitor: ['Claude', 'Claude'], assistant: ['Claude', 'Claude'], focus: ['Focus', 'Focus'],
+  const TITLES = { chat: ['Robo', 'Robo'], spotify: ['Muziek', 'Music'], monitor: ['Antigravity', 'Antigravity'], assistant: ['Antigravity', 'Antigravity'], focus: ['Focus', 'Focus'],
     tray: ['Lade', 'Tray'], clips: ['Klembord', 'Clipboard'], note: ['Notitie', 'Note'], apps: ['Apps', 'Apps'], shortcuts: ['Snelknoppen', 'Quick buttons'],
     settings: ['Instellingen', 'Settings'], mirror: ['Spiegel', 'Mirror'] };
   const en = () => window.__twocodePrefs?.().lang === 'en';
@@ -84,12 +95,25 @@
   const press = { key: null, at: 0 }; // what is pressed right now (it dims instantly, on pointer-down)
   const pressed = key => press.key === key && performance.now() - press.at < 600;
   let menuOpen = false, menuAt = 0, quitArmed = false, dragging = false;
-  const MENU = [['apps', 'grid', ['Alle apps', 'All apps']], ['settings', 'gear', ['Instellingen', 'Settings']], ['collapse', 'collapse', ['Inklappen', 'Fold in']], ['quit', 'power', ['Afsluiten', 'Quit']]];
+  const MENU = [['apps', 'grid', ['Alle apps', 'All apps']], ['settings', 'gear', ['Instellingen', 'Settings']], ['glassy', 'sparkle', ['Glasachtige UI', 'Glassy UI']], ['check', 'refresh', ['Updates zoeken', 'Check for updates']], ['collapse', 'collapse', ['Inklappen', 'Fold in']], ['quit', 'power', ['Afsluiten', 'Quit']]];
+  // a new version from twocode.nl is downloaded and checked (auto-update.cjs): a green dot on ⋯, "Install update" on top of
+  // its menu, and once a short message in the small island
+  let update = null;
+  const menuItems = () => update?.ready ? [['update', 'download', ['Update installeren', 'Install update']], ...MENU.filter(m => m[0] !== 'check')] : MENU;
+  const pretty = x => String(x || '').replace(/-beta\.(\d+)$/, ' beta $1'); // 1.2.0-beta.9 → 1.2.0 beta 9
+  const readyText = x => en() ? `An update is ready for you · ${pretty(x)}` : `Er staat een update voor je klaar · ${pretty(x)}`;
+  const seeUpdate = s => {
+    const fresh = !!s?.ready && s.ready !== update?.ready; update = s || null;
+    if (fresh) window.__twocodeFlash?.(readyText(s.ready), 7000);
+    if (menuOpen) renderMenu();
+  };
+  window.twocode?.updateState?.().then(seeUpdate).catch(() => {});
+  window.twocode?.onUpdateState?.(seeUpdate);
   window.__twocodePageTint = () => '#ffffff';
   // the pages in a row (the tabs and ‹ ›); only the page you are on wears a colour
-  const PAGES = [
+  const ALL_PAGES = [
     { view: 'home', icon: 'home', tint: '#ffffff', nl: 'Home', en: 'Home' },
-    { view: 'monitor', icon: 'claude', tint: '#d97757', nl: 'Claude', en: 'Claude' },
+    { view: 'monitor', icon: 'antigravity', tint: '#4285f4', nl: 'Antigravity', en: 'Antigravity' },
     { view: 'spotify', icon: 'music', tint: () => window.__twocodeAlbumColour || '#ff375f', nl: 'Muziek', en: 'Music' },
     { view: 'chat', icon: 'chat', tint: '#30d158', nl: 'Robo', en: 'Robo' },
     { view: 'focus', icon: 'timer', tint: '#bf5af2', nl: 'Focus', en: 'Focus' },
@@ -97,18 +121,35 @@
     { view: 'clips', icon: 'copy', tint: '#64d2ff', nl: 'Klembord', en: 'Clipboard' },
     { view: 'note', icon: 'note', tint: '#ffd60a', nl: 'Notitie', en: 'Note' }
   ];
-  const pageIndex = () => PAGES.findIndex(pg => pg.view === (currentView === 'assistant' ? 'monitor' : currentView));
+  // Apps you turned off (Settings → Apps) are not in the bar either (a user still saw Focus and Note after turning them off)
+  const PAGE_APP = { spotify: 'spotify', focus: 'focus', tray: 'tray', clips: 'clips', note: 'note' };
+  const pages = () => { const off = window.__twocodeAppsOff?.() || new Set(); return ALL_PAGES.filter(pg => !off.has(PAGE_APP[pg.view])); };
+  const pageIndex = () => pages().findIndex(pg => pg.view === (currentView === 'assistant' ? 'monitor' : currentView));
   function go(view) {
     if (window.__twocodeHomeEditing?.()) window.__twocodeHomeEdit?.(false);
-    const from = pageIndex(), to = PAGES.findIndex(pg => pg.view === view);
+    const from = pageIndex(), to = pages().findIndex(pg => pg.view === view);
     window.__twocodeNavDir = from < 0 || to < 0 || from === to ? 0 : to > from ? 1 : -1; // the new page slides in from that side
-    if (view === 'monitor') { window.__twocodeMonitor?.open?.('claudecode'); return; }
+    if (view === 'monitor') { window.__twocodeMonitor?.open?.('antigravity'); return; }
     setView(view); setMode('expanded');
   }
   const ease = (from, to, k) => from + (to - from) * k;
+  const geminiGlyph = (x, y, c, size) => {
+    ctx.save();
+    const r = size * 0.46;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.quadraticCurveTo(x, y, x, y + r);
+    ctx.quadraticCurveTo(x, y, x - r, y);
+    ctx.quadraticCurveTo(x, y, x, y - r);
+    ctx.closePath();
+    ctx.fillStyle = c;
+    ctx.fill();
+    ctx.restore();
+  };
   const claudeGlyph = (x, y, c, size) => { ctx.save(); ctx.strokeStyle = c; ctx.lineWidth = size * 0.13; ctx.lineCap = 'round'; const r = size * 0.42;
     for (let i = 0; i < 4; i++) { const an = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(x - Math.cos(an) * r, y - Math.sin(an) * r); ctx.lineTo(x + Math.cos(an) * r, y + Math.sin(an) * r); ctx.stroke(); } ctx.restore(); };
-  const pageIcon = (pg, x, y, size, colour) => pg.icon === 'claude' ? claudeGlyph(x, y, colour, size) : icon(pg.icon, x, y, size, colour, null, 'rgba(0,0,0,0)');
+  const pageIcon = (pg, x, y, size, colour) => (pg.icon === 'antigravity' ? geminiGlyph(x, y, colour, size) : pg.icon === 'claude' ? claudeGlyph(x, y, colour, size) : icon(pg.icon, x, y, size, colour, null, 'rgba(0,0,0,0)'));
   const nav = { vol: 0, sliding: false, lastSet: 0, widths: null };
   window.__twocodeNavGeometry = () => ({ top: 34, bottom: 38, side: 24 }); // contentRect (mascot.html) keeps out of this frame
   // a small label above a tab you point at (HTML, so it lies above the pages)
@@ -121,7 +162,7 @@
     // left: the page name
     const t = TITLES[currentView];
     // two-tone names, like "Focustimer": the first part white, the second in the page's colour
-    const TWO = { monitor: [['Claude ', 'Code'], ['Claude ', 'Code'], '#d97757'], spotify: [['Muziek', 'speler'], ['Music ', 'Player'], () => window.__twocodeAlbumColour || '#ff375f'],
+    const TWO = { monitor: [['Anti', 'gravity'], ['Anti', 'gravity'], '#4285f4'], spotify: [['Muziek', 'speler'], ['Music ', 'Player'], () => window.__twocodeAlbumColour || '#ff375f'],
       focus: [['Focus', 'timer'], ['Focus ', 'Timer'], '#bf5af2'], tray: [['Bestanden', 'lade'], ['File ', 'Tray'], '#ffd60a'], clips: [['Klem', 'bord'], ['Clip', 'board'], '#64d2ff'],
       note: [['Notitie', 'blok'], ['Note', 'pad'], '#ffd60a'], chat: [['Robo ', 'Chat'], ['Robo ', 'Chat'], '#30d158'], apps: [['Alle ', 'apps'], ['All ', 'apps'], '#8e8e93'],
       settings: [['Instel', 'lingen'], ['Set', 'tings'], '#8e8e93'], mirror: [['Spie', 'gel'], ['Mir', 'ror'], '#8e8e93'] };
@@ -145,6 +186,7 @@
     const mx = right - 24, overM = inside(pointer.x, pointer.y, { x: mx - 16, y: 2, width: 32, height: 30 });
     if (menuOpen || pressed('more') || overM) round(mx, cy, 12, '#2c2c2e');
     for (const dx of [-5, 0, 5]) round(mx + dx, cy, 1.8, '#ffffff');
+    if (update?.ready) { round(mx + 9, cy - 8, 4.5, '#000000'); round(mx + 9, cy - 8, 3.2, '#30d158'); } // an update is ready
     hit.more = { x: mx - 18, y: 0, width: 36, height: 34 };
     hit.navMusic = null; hit.navClear = null;
     if (currentView === 'tray' && (window.__twocodeTrayCount?.() || 0) > 0) {
@@ -170,7 +212,7 @@
       hit.navVol = { x: tx - 6, y: by - 12, width: tw2 + 12, height: 24, track: { x: tx, width: tw2 } };
     }
     // bottom middle: the pages as icons, always visible; the page you are on shows its name in a soft capsule in its colour
-    const n = PAGES.length, label = pg => en() ? pg.en : pg.nl;
+    const PAGES = pages(), n = PAGES.length, label = pg => en() ? pg.en : pg.nl;
     ctx.save(); ctx.font = '600 11px Inter, "Segoe UI", sans-serif';
     const want = PAGES.map((pg, j) => 30 + (j === i ? ctx.measureText(label(pg)).width + 10 : 0)); ctx.restore();
     if (!nav.widths || nav.widths.length !== n) nav.widths = want.slice();
@@ -216,50 +258,72 @@
   canvas.addEventListener('click', e => {
     if (mode !== 'expanded') return;
     const at = b => inside(e.clientX, e.clientY, b), stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
-    const i = pageIndex(), n = PAGES.length;
+    const PAGES = pages(), i = pageIndex(), n = PAGES.length;
     if (at(hit.navVol)) { stop(); return; }
     for (let j = 0; j < n; j++) if (at(hit['navTab' + j])) { stop(); sound('click'); go(PAGES[j].view); return; }
     if (at(hit.navMusic)) { stop(); sound('click'); go('spotify'); return; }
     if (at(hit.navClear)) { stop(); sound('click'); window.__twocodeTrayClear?.(); return; }
   }, true);
   // The ⋯ menu (HTML, so it lies above every page): it grows out of its button (Apple: anchor to the source),
-  // TwoCode's sound on top, then four rows; Quit asks once more in the row itself.
+  // TwoCode's sound on top, then the rows; Quit asks once more in the row itself.
   const menu = document.createElement('div'); menu.id = 'twocode-menu'; document.body.appendChild(menu);
   const menuStyle = document.createElement('style'); menuStyle.textContent = `
-#twocode-menu{position:absolute;z-index:90;width:236px;padding:6px;box-sizing:border-box;border-radius:12px;background:#1c1c1e;box-shadow:0 18px 44px rgba(0,0,0,.6);
-  font:500 15px Inter,"Segoe UI",sans-serif;color:#fff;transform-origin:calc(100% - 12px) -15px;opacity:0;transform:scale(.6);pointer-events:none;
-  transition:opacity .16s ease-out,transform .22s cubic-bezier(.2,.9,.3,1)}
+#twocode-menu{position:absolute;z-index:90;width:224px;padding:5px;box-sizing:border-box;border-radius:12px;background:#1c1c1e;box-shadow:0 16px 36px rgba(0,0,0,.6);
+  font:500 13.5px Inter,"Segoe UI",sans-serif;color:#fff;transform-origin:calc(100% - 12px) -15px;opacity:0;transform:scale(.6);pointer-events:none;
+  transition:opacity .16s ease-out,transform .22s cubic-bezier(.2,.9,.3,1);max-height:calc(100vh - 40px);overflow-y:auto;scrollbar-width:none}
+#twocode-menu::-webkit-scrollbar{display:none}
 #twocode-menu.open{opacity:1;transform:none;pointer-events:auto}
-#twocode-menu .mn-vol{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px}
-#twocode-menu .mn-track{flex:1;height:6px;border-radius:3px;background:#3a3a3c;position:relative;cursor:pointer}
+#twocode-menu .mn-vol{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px}
+#twocode-menu .mn-track{flex:1;height:5px;border-radius:3px;background:#3a3a3c;position:relative;cursor:pointer}
 #twocode-menu .mn-track i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:#fff}
-#twocode-menu .mn-track::before{content:'';position:absolute;inset:-14px 0}
-#twocode-menu button{display:flex;align-items:center;gap:12px;width:100%;height:40px;padding:0 12px;border:0;border-top:1px solid #2c2c2e;border-radius:0;background:transparent;color:#fff;font:inherit;text-align:left;cursor:pointer}
-#twocode-menu button:hover{background:#2c2c2e;border-radius:8px;border-top-color:transparent}
+#twocode-menu .mn-track::before{content:'';position:absolute;inset:-12px 0}
+#twocode-menu button{display:flex;align-items:center;gap:10px;width:100%;height:33px;padding:0 10px;border:0;border-top:1px solid #2c2c2e;border-radius:0;background:transparent;color:#fff;font:inherit;text-align:left;cursor:pointer}
+#twocode-menu button:hover{background:#2c2c2e;border-radius:7px;border-top-color:transparent}
 #twocode-menu button:active{transform:scale(.98);transition:transform .1s ease-out}
-#twocode-menu button.red{color:#ff4245}
-#twocode-menu svg{flex:none}`;
+#twocode-menu button.red{color:#ff453a}
+#twocode-menu button.green{color:#30d158}
+#twocode-menu button.on{color:#5ee88a}
+#twocode-menu svg{flex:none;width:16px;height:16px}
+#twocode-menu .mn-dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:#8e8e93;flex:none}
+#twocode-menu .mn-dot.on{background:#30d158;box-shadow:0 0 6px #30d158}
+body.twocode-glassy #twocode-menu{background:rgba(20,24,28,.82)!important;backdrop-filter:blur(24px) saturate(180%)!important;-webkit-backdrop-filter:blur(24px) saturate(180%)!important;border:1px solid rgba(255,255,255,.16)!important;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.05)!important}
+body.twocode-glassy #twocode-menu button{border-top-color:rgba(255,255,255,.08)!important}
+body.twocode-glassy #twocode-menu button:hover{background:rgba(255,255,255,.12)!important;border-top-color:transparent!important}
+body.twocode-glassy #twocode-menu .mn-track{background:rgba(255,255,255,.18)!important}`;
   document.head.appendChild(menuStyle);
   const SVG = {
     speaker: '<path d="M4 9.5h4l4.5-4v13L8 14.5H4z" fill="currentColor"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>',
     grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',
+    sparkle: '<path d="m12 3 1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/>',
     collapse: '<path d="m6 15 6-6 6 6"/>',
-    power: '<path d="M7.5 6.5a7 7 0 1 0 9 0"/><path d="M12 3v8"/>' };
-  const svg = (name, colour = 'currentColor') => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${colour}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[name]}</svg>`;
+    power: '<path d="M7.5 6.5a7 7 0 1 0 9 0"/><path d="M12 3v8"/>',
+    download: '<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>',
+    refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
+  const svg = (name, colour = 'currentColor') => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${colour}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[name] || ''}</svg>`;
   function renderMenu() {
     const words = (nl, en2) => en() ? en2 : nl;
+    const isGlassy = (typeof window.__twocodeIsGlassy === 'function' && window.__twocodeIsGlassy()) || localStorage.getItem('twocode:glassy') === '1';
     menu.innerHTML = `<div class="mn-vol">${svg('speaker')}<div class="mn-track" role="slider" aria-label="${words('Geluid van TwoCode', 'TwoCode sounds')}"><i style="width:${Math.round((window.__twocodeVolume?.() ?? 0) * 100)}%"></i></div></div>`
-      + MENU.map(([key, g, label]) => `<button type="button" data-menu="${key}" class="${key === 'quit' ? 'red' : ''}">${svg(g)}${key === 'quit' && quitArmed ? words('Klik nog eens om af te sluiten', 'Click again to quit') : (en() ? label[1] : label[0])}</button>`).join('');
+      + menuItems().map(([key, g, label]) => {
+          let text = en() ? label[1] : label[0];
+          if (key === 'quit' && quitArmed) text = words('Klik nog eens om af te sluiten', 'Click again to quit');
+          else if (key === 'glassy') text = words(isGlassy ? 'Glasachtig: Aan' : 'Glasachtig: Uit', isGlassy ? 'Glassy UI: On' : 'Glassy UI: Off');
+          const cls = [key === 'quit' ? 'red' : '', key === 'update' ? 'green' : '', key === 'glassy' && isGlassy ? 'on' : ''].filter(Boolean).join(' ');
+          return `<button type="button" data-menu="${key}" class="${cls}">${svg(g)}<span>${text}</span>${key === 'glassy' ? `<i class="mn-dot ${isGlassy ? 'on' : ''}"></i>` : ''}</button>`;
+        }).join('');
   }
   function openMenu(on) {
     menuOpen = on; quitArmed = false;
     if (on) { renderMenu(); menuAt = performance.now(); }
     menu.classList.toggle('open', on);
   }
+  // the menu only belongs to the big island: when it folds in (by itself, or because you moved away), the menu goes too
+  // (drawMenu below only runs while the big island is drawn, so it never saw the island fold in)
+  setInterval(() => { if (menuOpen && mode !== 'expanded') openMenu(false); }, 80);
   function drawMenu(right) {
     if (menuOpen && mode !== 'expanded') openMenu(false);
-    menu.style.left = `${right - 12 - 236}px`; menu.style.top = '32px';
+    menu.style.left = `${right - 12 - 224}px`; menu.style.top = '30px';
   }
   const setFromTrack = clientX => { const t = menu.querySelector('.mn-track'); if (!t) return; const r = t.getBoundingClientRect(); setVolume((clientX - r.left) / r.width); menu.querySelector('.mn-track i').style.width = `${Math.round(volume * 100)}%`; };
   menu.addEventListener('pointerdown', e => {
@@ -273,8 +337,30 @@
     const choice = b.dataset.menu;
     if (choice === 'quit') { if (quitArmed) { openMenu(false); sound('click'); window.twocode?.close?.(); } else { quitArmed = true; renderMenu(); sound('click'); } return; }
     openMenu(false);
+    if (choice === 'update') { sound('click'); window.twocode?.updateInstall?.(); return; }
+    if (choice === 'check') { // ask twocode.nl now (no restart): you have the newest version, or an update is ready for you
+      // the answer is a message in the small island, so the island folds in first (like Fold in)
+      sound('click'); window.__twocodeMonitor?.small?.(); window.__twocodeHoldClosed?.(); setMode('rest');
+      window.__twocodeFlash?.(en() ? 'Checking for updates…' : 'Zoeken naar updates…', 15000);
+      window.twocode?.updateCheck?.().then(s => {
+        if (!s || s.failed) throw new Error('check failed');
+        window.__twocodeFlash?.(s.ready ? readyText(s.ready)
+          : s.full ? (en() ? `${pretty(s.full)} is out · get it on twocode.nl` : `${pretty(s.full)} is uit · download hem op twocode.nl`)
+          : (en() ? `You have the newest version · ${pretty(s.current)}` : `Je hebt de nieuwste versie · ${pretty(s.current)}`), 5000);
+      }).catch(() => window.__twocodeFlash?.(en() ? 'Could not check. Are you online?' : 'Controleren lukte niet. Heb je internet?', 3500));
+      return;
+    }
     if (choice === 'apps') { setView('apps'); sound('click'); }
     else if (choice === 'settings') { setView('settings'); sound('click'); }
+    else if (choice === 'glassy') {
+      const next = localStorage.getItem('twocode:glassy') === '1' ? '0' : '1';
+      localStorage.setItem('twocode:glassy', next);
+      document.body.classList.toggle('twocode-glassy', next === '1');
+      const mon = document.getElementById('twocode-ai-monitor');
+      if (mon) mon.classList.toggle('twocode-glassy', next === '1');
+      sound('click');
+      window.__twocodeFlash?.(next === '1' ? (en() ? 'Glassy UI enabled' : 'Glasachtige UI aan') : (en() ? 'Solid black UI enabled' : 'Solide zwarte UI aan'), 2500);
+    }
     else if (choice === 'collapse') { window.__twocodeMonitor?.small?.(); window.__twocodeHoldClosed?.(); setMode('rest'); }
   });
   // a press anywhere else closes it

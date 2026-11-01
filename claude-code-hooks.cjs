@@ -18,14 +18,14 @@ const REPLY_SCRIPT = path.join(__dirname, 'twocode-reply.cjs');
 const REPLY_WAIT_S = 1800; // how long an island answer can still wake Claude after it stopped
 const VERSION = 4; // Bump when the installed hook config changes; older installs are upgraded on start.
 const HOOK_URL = 'http://127.0.0.1:' + PORT + ROUTE + '?v=' + VERSION;
-const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
-  'Notification', 'Stop', 'StopFailure', 'SessionEnd'];
+const EVENTS = ['UserPromptSubmit', 'PreInvocation', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
+  'Notification', 'Stop', 'StopFailure', 'SessionEnd', 'SessionStart'];
 // The terminal dialog stays usable while this hook waits; whoever answers first wins.
 const PERMISSION_WAIT_S = 300;
 const QUESTION_NOTIFICATIONS = new Set(['elicitation_dialog', 'elicitation_url_dialog', 'agent_needs_input']);
 const RANK = { question: 4, error: 3, running: 2, done: 1, ready: 0 };
 // The two coding agents TwoCode follows. Codex reads its hooks from ~/.codex/hooks.json (the same shape as Claude Code).
-const AGENTS = { claude: { id: 'claudecode', name: 'Claude Code', short: 'Claude' }, codex: { id: 'codex', name: 'Codex', short: 'Codex' } };
+const AGENTS = { claude: { id: 'claudecode', name: 'Claude Code', short: 'Claude' }, codex: { id: 'codex', name: 'Codex', short: 'Codex' }, antigravity: { id: 'antigravity', name: 'Antigravity', short: 'Antigravity' } };
 const CODEX_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'Stop', 'SessionEnd'];
 
 function createHub(options = {}) {
@@ -44,6 +44,12 @@ function createHub(options = {}) {
     resolvePid(pid).then(win => { if (win) { s.windowPid = win; s.pid = win; onChange(); } }).catch(() => {}).finally(() => { if (s.resolving === pid) s.resolving = null; });
   }
   const sessions = new Map();
+  let activeSessionId = null;
+  function selectSession(id) {
+    activeSessionId = id ? String(id) : null;
+    onChange();
+    return { ok: true };
+  }
   const waiting = new Map(); // session id → open PermissionRequest response
   let server = null, listening = false, serverError = '', hooksCache = false, checkedAt = 0;
   let usage = { fiveHour: null, sevenDay: null, at: 0 };
@@ -53,12 +59,148 @@ function createHub(options = {}) {
   let history = [];
   try { history = JSON.parse(fs.readFileSync(historyFile, 'utf8')); if (!Array.isArray(history)) history = []; } catch {}
   function remember(s, result) {
-    if (!historyFile || !s.prompt) return;
-    history.unshift({ at: Date.now(), agent: s.agent || 'claude', name: (AGENTS[s.agent] || AGENTS.claude).name, project: s.project || '', cwd: s.cwd || '', prompt: s.prompt,
-      result, files: (s.files || []).length, seconds: s.startedAt ? Math.round((Date.now() - s.startedAt) / 1000) : 0 });
-    history = history.slice(0, 40);
+    if (!historyFile) return;
+    const promptText = s.prompt || s.title || s.project || 'Antigravity sessie';
+    const now = Date.now();
+    if (history.length > 0 && history[0].agent === s.agent && (history[0].prompt === promptText || (history[0].project && history[0].project === (s.title || s.project)))) {
+      history[0].at = now;
+      history[0].result = result;
+      history[0].seconds = s.startedAt ? Math.round((now - s.startedAt) / 1000) : history[0].seconds;
+    } else {
+      history.unshift({ at: now, agent: s.agent || 'claude', name: (AGENTS[s.agent] || AGENTS.claude).name, project: s.title || s.project || '', cwd: s.cwd || '', prompt: promptText,
+        result, files: (s.files || []).length, seconds: s.startedAt ? Math.round((now - s.startedAt) / 1000) : 0 });
+      history = history.slice(0, 40);
+    }
     try { fs.writeFileSync(historyFile + '.tmp', JSON.stringify(history)); fs.renameSync(historyFile + '.tmp', historyFile); } catch {}
   }
+
+  let lastAntigravityScan = 0;
+  let antigravityScanning = false;
+  function getAntigravityDbPaths() {
+    const dbs = [];
+    const defaultDb = path.join(os.homedir(), '.gemini', 'antigravity', 'conversation_summaries.db');
+    if (fs.existsSync(defaultDb)) dbs.push({ slot: 'default', path: defaultDb });
+    const profileDirs = [process.env.ANTIGRAVITY_PROFILES_DIR, 'D:/Launchers/AntigravityProfiles', 'C:/Launchers/AntigravityProfiles'].filter(Boolean);
+    for (const pDir of profileDirs) {
+      if (fs.existsSync(pDir)) {
+        try {
+          for (const s of fs.readdirSync(pDir)) {
+            const db = path.join(pDir, s, 'user', '.gemini', 'antigravity', 'conversation_summaries.db');
+            if (fs.existsSync(db)) dbs.push({ slot: s.replace(/^profile_/, ''), path: db });
+          }
+        } catch {}
+      }
+    }
+    return dbs;
+  }
+
+  function syncAntigravitySessions() {
+    const now = Date.now();
+    if (now - lastAntigravityScan < 3000 || antigravityScanning) return;
+    lastAntigravityScan = now;
+    antigravityScanning = true;
+
+    const cp = require('node:child_process');
+    cp.exec('powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name = \'Antigravity.exe\'\\" | Where-Object { $_.CommandLine -notlike \'*--type=*\' } | Select-Object ProcessId, CommandLine | ConvertTo-Json"', { timeout: 3000 }, (err, stdout) => {
+      antigravityScanning = false;
+      const runningProfiles = new Map();
+      if (!err && stdout && stdout.trim()) {
+        try {
+          const parsed = JSON.parse(stdout);
+          const list = Array.isArray(parsed) ? parsed : [parsed];
+          for (const item of list) {
+            const m = (item.CommandLine || '').match(/--profile-slot=(\w+)/);
+            const slot = m ? m[1] : 'default';
+            runningProfiles.set(slot, item.ProcessId);
+          }
+        } catch {}
+      }
+
+      let changedAny = false;
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+      for (const { slot, path: dbPath } of getAntigravityDbPaths()) {
+        if (fs.existsSync(dbPath)) {
+          try {
+            const { DatabaseSync } = require('node:sqlite');
+            const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
+            const rows = db.prepare('SELECT conversation_id, title, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 2').all();
+            for (const row of rows) {
+              if (row && row.conversation_id) {
+                const modTime = new Date(row.last_modified_time).getTime();
+                if (now - modTime < ONE_DAY_MS * 2) {
+                  const pid = runningProfiles.get(slot) || runningProfiles.get('default') || null;
+                  if (!sessions.has(row.conversation_id)) {
+                    sessions.set(row.conversation_id, {
+                      id: row.conversation_id,
+                      agent: 'antigravity',
+                      slot,
+                      pid,
+                      windowPid: pid,
+                      title: row.title || 'Antigravity ' + slot,
+                      project: row.title || 'Antigravity ' + slot,
+                      state: 'ready',
+                      detail: 'Klaar voor je vraag',
+                      question: '',
+                      permission: null,
+                      startedAt: null,
+                      endedAt: null,
+                      updatedAt: modTime || now
+                    });
+                    changedAny = true;
+                  } else {
+                    const existing = sessions.get(row.conversation_id);
+                    if (pid && !existing.pid) { existing.pid = pid; existing.windowPid = pid; changedAny = true; }
+                    if (!existing.title && row.title) { existing.title = row.title; changedAny = true; }
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+
+      if (changedAny) onChange();
+    });
+  }
+
+  function initAntigravitySessionsSync() {
+    try {
+      const { DatabaseSync } = require('node:sqlite');
+      const now = Date.now();
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      for (const { slot, path: dbPath } of getAntigravityDbPaths()) {
+        if (fs.existsSync(dbPath)) {
+          try {
+            const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
+            const rows = db.prepare('SELECT conversation_id, title, last_modified_time FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 2').all();
+            for (const row of rows) {
+              if (row && row.conversation_id && !sessions.has(row.conversation_id)) {
+                const modTime = new Date(row.last_modified_time).getTime();
+                if (now - modTime < ONE_DAY_MS * 2) {
+                  sessions.set(row.conversation_id, {
+                    id: row.conversation_id,
+                    agent: 'antigravity',
+                    slot,
+                    title: row.title || 'Antigravity ' + slot,
+                    project: row.title || 'Antigravity ' + slot,
+                    state: 'ready',
+                    detail: 'Klaar voor je vraag',
+                    question: '',
+                    permission: null,
+                    startedAt: null,
+                    endedAt: null,
+                    updatedAt: modTime || now
+                  });
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  initAntigravitySessionsSync();
 
   function token() {
     const file = path.join(userData, 'claude-code-hook-token');
@@ -147,7 +289,12 @@ function createHub(options = {}) {
   // Codex asks you once to trust new hooks: that is Codex keeping you safe.
   const codexCommand = () => `curl.exe -s -m 3 -H "X-TwoCode-Token: ${token()}" -H "Content-Type: application/json" --data-binary @- "${HOOK_URL}&agent=codex"`;
   const isOurCodexHook = hook => hook?.type === 'command' && typeof hook.command === 'string' && hook.command.includes('127.0.0.1:' + PORT + ROUTE);
-  const codexAvailable = () => fs.existsSync(codexHome);
+  // Codex is really on this PC: its command is on the PATH, or Codex itself has been used here (signed in, settings, chats).
+  // The ~/.codex folder alone says nothing: TwoCode's own hooks.json can be all that is in it.
+  const onPath = name => (process.env.PATH || '').split(path.delimiter).some(dir => dir && ['.exe', '.cmd', '.ps1', ''].some(ext => {
+    try { return fs.statSync(path.join(dir, name + ext)).isFile(); } catch { return false; }
+  }));
+  const codexAvailable = () => ['auth.json', 'config.toml', 'sessions', 'history.jsonl', 'log'].some(f => fs.existsSync(path.join(codexHome, f))) || onPath('codex');
   function readCodex() {
     try { return JSON.parse(fs.readFileSync(codexFile, 'utf8')); }
     catch (error) { if (error.code === 'ENOENT') return {}; throw new Error('~/.codex/hooks.json is geen geldige JSON. Er is niets veranderd.'); }
@@ -279,7 +426,7 @@ function createHub(options = {}) {
     const name = event.hook_event_name;
     if (!id || !(agent === 'codex' ? CODEX_EVENTS : EVENTS).includes(name)) return false;
     const who = AGENTS[agent] || AGENTS.claude;
-    if (agent === 'codex') res = null; // Codex does not wait for the island: you answer in its own window
+    if (agent === 'codex' || agent === 'antigravity') res = null; // Codex and Antigravity do not wait for the island: you answer in their own window
     // A finished tool or turn means the permission was answered elsewhere (terminal, phone).
     // PreToolUse is excluded: parallel tool calls may start while a permission is still open.
     if (!['PermissionRequest', 'Notification', 'PreToolUse'].includes(name)) release(id);
@@ -290,41 +437,61 @@ function createHub(options = {}) {
     const s = sessions.get(id) || { id, agent, state: 'ready', detail: '', question: '', permission: null, startedAt: null, endedAt: null, updatedAt: now };
     s.agent = agent;
     if (typeof event.cwd === 'string') { s.project = path.basename(event.cwd); s.cwd = event.cwd; }
+    if (event.title) s.title = event.title;
+    if (event.model) s.modelName = event.model;
     s.updatedAt = now;
     const start = () => { if (!s.startedAt || s.endedAt) s.startedAt = now; s.endedAt = null; };
     let held = false;
     switch (name) {
       case 'SessionStart':
         s.state = 'ready'; s.detail = 'Klaar voor je vraag'; break;
+      case 'PreInvocation':
       case 'UserPromptSubmit':
         s.startedAt = now; s.endedAt = null; s.state = 'running'; s.detail = who.short + ' is bezig'; s.question = ''; s.permission = null;
         s.ask = null; s.plan = null; s.stats = {}; s.steps = []; s.files = []; s.commands = []; s.code = null; s.run = null;
-        s.prompt = String(event.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 240); s.lastMessage = ''; break;
+        s.prompt = String(event.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 240); s.lastMessage = '';
+        if (!s.title && s.prompt) s.title = s.prompt.slice(0, 36); break;
       case 'PreToolUse':
         start();
+        if (event.prompt && !s.prompt) s.prompt = String(event.prompt).replace(/\s+/g, ' ').trim().slice(0, 240);
+        if (!s.title && s.prompt) s.title = s.prompt.slice(0, 36);
         // Step list for the Claude page: what Claude is doing, one line per tool call.
         if (!['AskUserQuestion', 'ExitPlanMode'].includes(event.tool_name)) {
           s.steps ||= []; s.steps.push({ tool: String(event.tool_name || ''), kind: toolKind(event.tool_name) || 'other', label: toolLabel(event), what: toolDetail(event).slice(0, 120), state: 'running' });
           if (s.steps.length > 12) s.steps.shift();
           // For the summary: which files were changed and which commands were run.
-          const file = event.tool_input?.file_path ? path.basename(String(event.tool_input.file_path)) : '';
+          const input = event.tool_input || {};
+          const file = input.file_path || input.Path || input.path ? path.basename(String(input.file_path || input.Path || input.path)) : '';
+          const cmd = input.command || input.CommandLine || input.cmd || '';
           s.files ||= []; s.commands ||= [];
           if (toolKind(event.tool_name) === 'edit' && file && !s.files.includes(file)) s.files.push(file);
-          if (toolKind(event.tool_name) === 'run' && event.tool_input?.command) s.commands.push(String(event.tool_input.command).slice(0, 80));
-          // The code Claude is changing right now (shown as a small red/green diff in the island).
-          const input = event.tool_input || {}, edit = Array.isArray(input.edits) ? input.edits[0] || {} : input;
+          if (toolKind(event.tool_name) === 'run' && cmd) s.commands.push(String(cmd).slice(0, 80));
+          // The code changed right now (shown as a small red/green diff in the island).
+          const edit = Array.isArray(input.edits) ? input.edits[0] || {} : input;
           const cut = text => String(text || '').split('\n').map(l => l.replace(/\t/g, '  ').slice(0, 90)).filter((l, i, all) => l.trim() || (i > 0 && i < all.length - 1));
           if (toolKind(event.tool_name) === 'edit' && file) {
-            const removed = cut(edit.old_string).slice(0, 3).map(text => ({ t: '-', text })), added = cut(edit.new_string ?? edit.content ?? input.content).slice(0, removed.length ? 3 : 6).map(text => ({ t: '+', text }));
-            // the line it starts on: find the old text in the file (small files only), a new file starts at line 1
+            let removed = [], added = [];
+            if (input.Target || input.Replacement) {
+              removed = cut(input.Target).slice(0, 3).map(text => ({ t: '-', text }));
+              added = cut(input.Replacement).slice(0, removed.length ? 3 : 6).map(text => ({ t: '+', text }));
+            } else if (input.Content) {
+              added = cut(input.Content).slice(0, 6).map(text => ({ t: '+', text }));
+            } else {
+              removed = cut(edit.old_string).slice(0, 3).map(text => ({ t: '-', text }));
+              added = cut(edit.new_string ?? edit.content ?? input.content).slice(0, removed.length ? 3 : 6).map(text => ({ t: '+', text }));
+            }
             let start = 1;
             try {
-              const full = String(input.file_path);
-              if (edit.old_string && fs.statSync(full).size < 2e6) { const body = fs.readFileSync(full, 'utf8'), at = body.indexOf(String(edit.old_string)); if (at >= 0) start = body.slice(0, at).split(/\r?\n/).length; }
+              const full = String(input.file_path || input.Path || input.path);
+              const targetStr = String(input.Target || edit.old_string || '');
+              if (targetStr && fs.statSync(full).size < 2e6) {
+                const body = fs.readFileSync(full, 'utf8'), at = body.indexOf(targetStr);
+                if (at >= 0) start = body.slice(0, at).split(/\r?\n/).length;
+              }
             } catch {}
             s.code = { file, start, lines: [...removed, ...added] };
           }
-          if (toolKind(event.tool_name) === 'run' && input.command) s.run = { command: String(input.command).slice(0, 80), out: [] };
+          if (toolKind(event.tool_name) === 'run' && cmd) s.run = { command: String(cmd).slice(0, 80), out: [] };
         }
         if (waiting.has(id)) break;
         s.state = 'running'; s.detail = toolLabel(event, who.short); s.question = ''; s.permission = null; break;
@@ -334,7 +501,12 @@ function createHub(options = {}) {
         const step = (s.steps || []).find(x => x.state === 'running' && x.tool === String(event.tool_name || '')) || (s.steps || []).find(x => x.state === 'running');
         if (step) step.state = name === 'PostToolUseFailure' ? 'failed' : 'done';
         // What the terminal said (last lines), for the island.
-        if (kind === 'run' && s.run) { const r = event.tool_response || {}, text = typeof r === 'string' ? r : [r.stdout, r.stderr, r.output].filter(Boolean).join('\n'); s.run.out = String(text).split('\n').map(l => l.trimEnd().slice(0, 90)).filter(Boolean).slice(-3); s.run.failed = name === 'PostToolUseFailure'; }
+        if (kind === 'run' && s.run) {
+          const r = event.tool_response || {};
+          const text = typeof r === 'string' ? r : [r.output, r.stdout, r.stderr].filter(Boolean).join('\n');
+          s.run.out = String(text).split('\n').map(l => l.trimEnd().slice(0, 90)).filter(Boolean).slice(-3);
+          s.run.failed = name === 'PostToolUseFailure';
+        }
         break;
       }
       case 'PermissionRequest': {
@@ -373,8 +545,10 @@ function createHub(options = {}) {
         const question = questionFrom(String(event.last_assistant_message || ''));
         s.endedAt = now; s.state = question ? 'question' : 'done'; s.permission = null; s.ask = null; s.plan = null;
         for (const step of s.steps || []) if (step.state === 'running') step.state = 'done';
-        s.lastMessage = tail(String(event.last_assistant_message || ''), 2000);
+        s.lastMessage = tail(String(event.last_assistant_message || s.prompt || ''), 2000);
         s.detail = question ? 'Heeft een vraag voor jou' : 'Klaar'; s.question = question ? s.lastMessage : '';
+        if (event.prompt && !s.prompt) s.prompt = String(event.prompt).replace(/\s+/g, ' ').trim().slice(0, 240);
+        if (!s.prompt) s.prompt = s.title || s.project || 'Antigravity sessie';
         remember(s, question ? 'question' : 'done');
         onFinish(s); break;
       }
@@ -410,7 +584,11 @@ function createHub(options = {}) {
             holdReply(String(data.session_id || ''), res); held = true;
           }
           else if (route === STATUS_ROUTE) applyUsage(data);
-          else held = apply(data, res, /[?&]agent=codex(&|$)/.test(String(req.url)) ? 'codex' : 'claude');
+          else {
+            const agentMatch = String(req.url).match(/[?&]agent=([a-z0-9_-]+)/i);
+            const reqAgent = agentMatch ? agentMatch[1].toLowerCase() : 'claude';
+            held = apply(data, res, reqAgent);
+          }
         } catch {}
         if (!held) res.writeHead(200).end(); // Empty body: Claude Code continues as normal.
       });
@@ -420,29 +598,39 @@ function createHub(options = {}) {
       serverError = error.code === 'EADDRINUSE' ? 'TwoCode draait al ergens anders (poort ' + PORT + ' is bezet). Sluit de andere TwoCode.' : error.message;
       onChange();
     });
-    server.listen(PORT, '127.0.0.1', () => { listening = true; serverError = ''; onChange(); });
+    server.listen(PORT, '127.0.0.1', () => {
+      listening = true; serverError = ''; onChange();
+    });
   }
   function stop() { for (const id of [...waiting.keys()]) release(id); for (const id of [...replies.keys()]) answer(id, ''); try { server?.close(); } catch {} server = null; listening = false; }
 
   // One entry for the island: the session that needs you most first.
-  let codexCache = false;
-  function view(agent = 'claude') {
-    const who = AGENTS[agent] || AGENTS.claude;
+  let codexCache = false, codexThere = false;
+  function view(agent = 'antigravity') {
+    if (agent === 'antigravity') syncAntigravitySessions();
+    const who = AGENTS[agent] || AGENTS.antigravity || AGENTS.claude;
     const list = [...sessions.values()].filter(s => (s.agent || 'claude') === agent).sort((a, b) => (RANK[b.state] - RANK[a.state]) || (b.updatedAt - a.updatedAt));
-    const now = Date.now(), top = list[0];
-    if (now - checkedAt > 5000) { hooksCache = installed(); codexCache = codexInstalled(); checkedAt = now; } // the files are read at most every 5 s
-    const hooks = agent === 'codex' ? codexCache : hooksCache;
-    const base = { provider: who.id, name: who.name, agent, kind: 'hooks', hooksInstalled: hooks, available: agent === 'codex' ? codexAvailable() : true,
-      model: agent === 'codex' ? '' : getModel(), modelNow: top?.modelName || '', canReply: false, questionId: '', error: serverError,
+    const now = Date.now();
+    let top = null;
+    if (activeSessionId && sessions.has(activeSessionId)) {
+      const chosen = sessions.get(activeSessionId);
+      if ((chosen.agent || 'claude') === agent) top = chosen;
+    }
+    if (!top) top = list[0];
+    if (now - checkedAt > 5000) { hooksCache = installed(); codexCache = codexInstalled(); codexThere = codexAvailable(); checkedAt = now; } // the files are read at most every 5 s
+    const hooks = agent === 'antigravity' ? true : (agent === 'codex' ? codexCache : hooksCache);
+    const base = { provider: who.id, name: who.name, agent, kind: 'hooks', hooksInstalled: hooks, available: agent === 'codex' ? codexThere : true,
+      model: agent === 'antigravity' ? 'Gemini 3.8' : (agent === 'codex' ? '' : getModel()), modelNow: top?.modelName || '', canReply: false, questionId: '', error: serverError,
       usage: { fiveHour: live(usage.fiveHour, now), sevenDay: live(usage.sevenDay, now), context: top?.context ?? null } };
     if (!hooks || !listening) return { ...base, connected: false, state: 'disconnected', detail: hooks ? 'Niet actief' : 'Niet gekoppeld', question: '', elapsed: 0, list: [] };
-    const item = s => ({ id: s.id, project: s.project || who.name, state: s.state, detail: s.detail,
+    const item = s => ({ id: s.id, title: s.title || s.project || who.name, project: s.title || s.project || who.name, state: s.state, detail: s.detail,
+      active: Boolean(top && s.id === top.id),
       elapsed: s.startedAt ? Math.floor(((s.endedAt || now) - s.startedAt) / 1000) : 0 });
     if (!top) return { ...base, connected: true, state: 'ready', detail: 'Wacht op ' + who.name, question: '', elapsed: 0, list: [] };
     return { ...base, connected: true, state: top.state, detail: top.detail, question: top.question, elapsed: item(top).elapsed,
-      sessionId: top.id, lastMessage: top.lastMessage || '', ask: waiting.has(top.id) ? top.ask || null : null,
+      sessionId: top.id, title: top.title || top.project || who.name, lastMessage: top.lastMessage || '', ask: waiting.has(top.id) ? top.ask || null : null,
       plan: waiting.has(top.id) ? top.plan || null : null, stats: top.stats || {}, steps: (top.steps || []).slice(-8), prompt: top.prompt || '', files: (top.files || []).slice(-8), commands: (top.commands || []).slice(-3), code: top.code || null, run: top.run || null, canJump: Boolean(top.pid), canReply: replies.has(top.id) && !waiting.has(top.id), permission: top.permission && waiting.has(top.id) ? top.permission : null,
-      source: { process: who.name, title: top.project }, list: list.slice(0, 4).map(item) };
+      source: { process: who.name, title: top.title || top.project }, list: list.slice(0, 8).map(item) };
   }
   const pidOf = sessionId => sessions.get(sessionId)?.pid || null;
   // The window was closed: learn it again from the next hook.
@@ -454,37 +642,42 @@ function createHub(options = {}) {
     for (const h of history) if (h.cwd && !seen.has(h.cwd)) seen.set(h.cwd, { name: path.basename(h.cwd), cwd: h.cwd, agent: h.agent || 'claude' });
     return [...seen.values()];
   }
-  return { projects, start, stop, install, uninstall, installed, installCodex, uninstallCodex, codexInstalled, codexAvailable, history: () => history.slice(), view, apply, applyUsage, decide, seen, reply, answerQuestions, decidePlan, pidOf, forgetWindow, getModel, setModel, PORT };
+  return { projects, start, stop, install, uninstall, installed, installCodex, uninstallCodex, codexInstalled, codexAvailable, history: () => history.slice(), view, apply, applyUsage, decide, seen, reply, answerQuestions, decidePlan, selectSession, pidOf, forgetWindow, getModel, setModel, PORT };
 }
 
 // Groups for "what Claude did" (read 3 · edited 2 · ran 1 ...).
 function toolKind(tool) {
-  if (tool === 'Read') return 'read';
-  if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(tool)) return 'edit';
-  if (/^(Bash|PowerShell|shell|exec_command|local_shell|unified_exec)$/i.test(tool)) return 'run';
-  if (/^apply_patch$/i.test(tool)) return 'edit';
-  if (/^(Grep|Glob)$/.test(tool)) return 'search';
-  if (/^(WebSearch|WebFetch)$/.test(tool)) return 'web';
-  if (/^(Agent|Task)$/.test(tool)) return 'agent';
+  if (/^(Read|read_file|read_text_file)$/i.test(tool)) return 'read';
+  if (/^(Edit|Write|MultiEdit|NotebookEdit|edit_file|write_file|apply_patch)$/i.test(tool)) return 'edit';
+  if (/^(Bash|PowerShell|shell|exec_command|local_shell|unified_exec|run_command)$/i.test(tool)) return 'run';
+  if (/^(Grep|Glob|search|file_search)$/i.test(tool)) return 'search';
+  if (/^(WebSearch|WebFetch|search_web)$/i.test(tool)) return 'web';
+  if (/^(Agent|Task|invoke_subagent)$/i.test(tool)) return 'agent';
+  if (/^ask_question$/i.test(tool)) return 'question';
   return '';
 }
-function toolLabel(event, who = 'Claude') {
+function toolLabel(event, who = 'Antigravity') {
   const tool = String(event.tool_name || '');
-  const file = event.tool_input?.file_path ? path.basename(String(event.tool_input.file_path)) : '';
-  if (tool === 'Read') return 'Leest ' + (file || 'een bestand');
-  if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(tool)) return 'Bewerkt ' + (file || 'een bestand');
-  if (/^(Bash|PowerShell)$/.test(tool)) return 'Voert een opdracht uit';
-  if (/^(Grep|Glob)$/.test(tool)) return 'Zoekt in de code';
-  if (/^(WebSearch|WebFetch)$/.test(tool)) return 'Zoekt op internet';
-  if (/^(Agent|Task)$/.test(tool)) return 'Start een helper';
-  if (/^(shell|exec_command|local_shell|unified_exec)$/i.test(tool)) return 'Voert een opdracht uit';  // Codex
+  const input = event.tool_input || {};
+  const rawFile = input.file_path || input.Path || input.path || '';
+  const file = rawFile ? path.basename(String(rawFile)) : '';
+  const cmd = input.command || input.CommandLine || input.cmd || '';
+  if (/^(Read|read_file|read_text_file)$/i.test(tool)) return 'Leest ' + (file || 'een bestand');
+  if (/^(Edit|Write|MultiEdit|NotebookEdit|edit_file|write_file)$/i.test(tool)) return 'Bewerkt ' + (file || 'een bestand');
+  if (/^(Bash|PowerShell|shell|exec_command|local_shell|unified_exec|run_command)$/i.test(tool)) {
+    return cmd ? cmd.slice(0, 60) : 'Voert een opdracht uit';
+  }
+  if (/^(Grep|Glob|search|file_search)$/i.test(tool)) return 'Zoekt in de code';
+  if (/^(WebSearch|WebFetch|search_web)$/i.test(tool)) return 'Zoekt op internet';
+  if (/^(Agent|Task|invoke_subagent)$/i.test(tool)) return 'Start een helper';
+  if (/^ask_question$/i.test(tool)) return 'Stelt een vraag';
   if (/^apply_patch$/i.test(tool)) return 'Bewerkt bestanden';
-  return tool ? 'Gebruikt ' + tool : who + ' is bezig';
+  return tool ? tool + (cmd ? ': ' + cmd.slice(0, 40) : file ? ': ' + file : '') : who + ' is bezig';
 }
 // What exactly will happen, so you can judge before allowing.
 function toolDetail(event) {
   const input = event.tool_input || {};
-  const text = input.command || input.file_path || input.url || input.query || input.pattern || '';
+  const text = input.command || input.CommandLine || input.cmd || input.file_path || input.Path || input.path || input.url || input.query || input.Prompt || input.pattern || '';
   return String(text).slice(0, 300);
 }
 // After its reset time a usage window starts again at 0%.

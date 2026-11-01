@@ -2,16 +2,16 @@
 (function monitorIsland() {
   const api = window.twocode;
   if (!api?.aiMonitorGet) return;
-  const names = { chatgpt: 'ChatGPT', claude: 'Claude', claudecode: 'Claude Code', codex: 'Codex' };
-  // The four AIs TwoCode can follow: the coding agents (hooks) and the chat apps (their window).
-  const PICKS = [['claudecode', 'Claude Code'], ['codex', 'Codex'], ['claude', 'Claude'], ['chatgpt', 'ChatGPT']];
+  const names = { chatgpt: 'ChatGPT', claude: 'Claude', claudecode: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' };
+  // The AIs TwoCode can follow: the coding agents (hooks) and the chat apps (their window).
+  const PICKS = [['antigravity', 'Antigravity'], ['claudecode', 'Claude Code'], ['codex', 'Codex'], ['claude', 'Claude'], ['chatgpt', 'ChatGPT']];
   const colours = { running: '#ff9a1f', sending: '#ff9a1f', question: '#ff9a1f', error: '#ff3b3b',
     stopped: '#ff3b3b', unavailable: '#ff3b3b', done: '#22e05a', ready: '#b8c0b5',
     connecting: '#b8c0b5', disconnected: '#7e887a', login: '#7e887a' };
   const labels = { running: 'Bezig', sending: 'Versturen', question: 'Vraag', error: 'Fout', stopped: 'Gestopt',
     unavailable: 'Niet beschikbaar', done: 'Klaar', ready: 'Ready', connecting: 'Verbinden', disconnected: 'Niet verbonden', login: 'Inloggen' };
   let state = { providers: Object.keys(names).map(provider => ({ provider, name: names[provider], state: 'disconnected', detail: 'Verbind jouw gesprek' })) };
-  let selected = null, choosing = false, windows = [], error = '', pending = false, lastSignature = '';
+  let selected = 'antigravity', choosing = false, windows = [], error = '', pending = false, lastSignature = '';
   const drafts = new Map();
   const root = document.createElement('section'); root.id = 'twocode-ai-monitor'; document.body.appendChild(root);
   const statusReader = document.createElement('div'); statusReader.id = 'twocode-ai-monitor-status';
@@ -486,10 +486,14 @@
 @keyframes cp-shine{from{background-position:100% 0}to{background-position:-100% 0}}
 #twocode-ai-monitor.cl-new .gl-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px;align-items:center;margin-top:2px}
 #twocode-ai-monitor.cl-new .gl-l{min-width:0}
-#twocode-ai-monitor.cl-new .gl-tile{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;font-weight:600;color:rgba(255,255,255,.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#twocode-ai-monitor.cl-new .gl-tile span{flex:none;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:#fff;background:linear-gradient(150deg,#eba184,#b54e2c);box-shadow:0 2px 8px rgba(0,0,0,.3)}
-#twocode-ai-monitor.cc-codex .gl-tile span{background:linear-gradient(150deg,#6b9bff,#1d4fd8)}
-#twocode-ai-monitor.cl-new .gl-tile span.live svg{animation:cp-turn 7s linear infinite}
+#twocode-ai-monitor.cl-new .gl-tile{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;font-weight:600;color:rgba(255,255,255,.82);white-space:nowrap;overflow:hidden;min-width:0;max-width:100%}
+#twocode-ai-monitor.cl-new .gl-tile > .gl-ico{flex:none;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:#fff;background:linear-gradient(150deg,#eba184,#b54e2c);box-shadow:0 2px 8px rgba(0,0,0,.3)}
+#twocode-ai-monitor.cc-codex .gl-tile > .gl-ico{background:linear-gradient(150deg,#6b9bff,#1d4fd8)}
+#twocode-ai-monitor.cl-new .gl-tile > .gl-ico.live svg{animation:cp-turn 7s linear infinite}
+#twocode-ai-monitor.cl-new .gl-marquee{flex:1;min-width:0;overflow:hidden;white-space:nowrap;position:relative;-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 14px),transparent 100%);mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 14px),transparent 100%)}
+#twocode-ai-monitor.cl-new .gl-marquee-text{display:inline-block;white-space:nowrap;font-size:12px;font-weight:600;color:rgba(255,255,255,.85);background:transparent!important;box-shadow:none!important;border:none!important;border-radius:0!important;padding:0!important;margin:0!important;width:auto!important;height:auto!important;will-change:transform}
+#twocode-ai-monitor.cl-new .gl-marquee-text.scrolling{animation:am-scroll-marquee 8s ease-in-out infinite alternate}
+@keyframes am-scroll-marquee{0%,20%{transform:translateX(0)}80%,100%{transform:translateX(var(--scroll-dist,-60px))}}
 #twocode-ai-monitor.cl-new .gl-big{margin:0;font-size:56px;line-height:52px;font-weight:700;letter-spacing:-2.6px;font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #twocode-ai-monitor.cl-new .gl-big.word{font-size:38px;line-height:42px;letter-spacing:-1.4px}
 #twocode-ai-monitor.cl-new .gl-sub{margin:6px 0 0;font-size:13px;line-height:17px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -549,7 +553,42 @@
 #twocode-ai-monitor.cl-new .gl-col .gl-card{max-height:none}
 #twocode-ai-monitor.cl-new .gl-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:none}
 #twocode-ai-monitor.cl-new .gl-note{flex:none;margin-top:8px;height:32px;border:0;border-radius:10px;background:rgba(255,255,255,.13);color:#fff;padding:0 12px;font:13px Inter,"Segoe UI",sans-serif;outline:none}
-@media(prefers-reduced-motion:reduce){#twocode-ai-monitor.cl-new .gl-tile span.live svg,#twocode-ai-monitor.cl-new .gl-steps .n i::after,#twocode-ai-monitor.cl-new .gl-think span,#twocode-ai-monitor.cl-new .gl-card{animation:none}}
+#twocode-ai-monitor.cc-antigravity .gl-tile > .gl-ico{background:linear-gradient(150deg,#1a73e8,#4285f4)}
+#twocode-ai-monitor .am-capsules{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent;padding:2px 2px 6px;margin-bottom:2px;flex:none;scroll-behavior:smooth}
+#twocode-ai-monitor .am-capsules::-webkit-scrollbar{height:3px}
+#twocode-ai-monitor .am-capsules::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+#twocode-ai-monitor .am-capsules::-webkit-scrollbar-track{background:transparent}
+#twocode-ai-monitor .am-capsule{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.75);font:600 11px Inter,"Segoe UI",sans-serif;cursor:pointer;white-space:nowrap;flex:none;max-width:180px;transition:all .2s ease}
+#twocode-ai-monitor .am-capsule:hover{background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.24)}
+#twocode-ai-monitor .am-capsule.active{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.38);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+#twocode-ai-monitor .am-cap-dot{width:6px;height:6px;border-radius:50%;background:var(--lamp,#30d158);box-shadow:0 0 6px var(--lamp,#30d158);flex:none}
+#twocode-ai-monitor .am-cap-dot.blink{animation:am-pulse 1.2s ease-in-out infinite}
+#twocode-ai-monitor .am-cap-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+#twocode-ai-monitor .am-cap-time{font-size:10px;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;flex:none}
+#twocode-ai-monitor.cl-new .gl-tasks-scroll{flex:1;min-height:0;max-height:102px;overflow-y:auto;overflow-x:hidden;padding-right:3px;margin-top:2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
+#twocode-ai-monitor.cl-new .gl-tasks-scroll::-webkit-scrollbar{width:4px}
+#twocode-ai-monitor.cl-new .gl-tasks-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:4px}
+#twocode-ai-monitor.cl-new .gl-tasks-scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.45)}
+#twocode-ai-monitor.cl-new .gl-tasks-scroll .gl-row{border-radius:6px;padding:0 4px;transition:background .15s ease}
+#twocode-ai-monitor.cl-new .gl-tasks-scroll .gl-row:hover{background:rgba(255,255,255,.07)}
+#twocode-ai-monitor.twocode-glassy .gl-card{background:rgba(255,255,255,.07)!important;backdrop-filter:blur(24px) saturate(180%)!important;-webkit-backdrop-filter:blur(24px) saturate(180%)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 8px 32px rgba(0,0,0,.36)!important}
+#twocode-ai-monitor.twocode-glassy .gl-tile > .gl-ico{box-shadow:0 2px 10px rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.25)!important}
+#twocode-ai-monitor.twocode-glassy .am-capsule{background:rgba(255,255,255,.09)!important;backdrop-filter:blur(14px)!important;border-color:rgba(255,255,255,.16)!important}
+#twocode-ai-monitor.twocode-glassy .am-capsule.active{background:rgba(255,255,255,.22)!important;border-color:rgba(255,255,255,.38)!important;box-shadow:0 4px 14px rgba(0,0,0,.35)!important}
+#twocode-ai-monitor.twocode-glassy .gl-chip{background:rgba(255,255,255,.09)!important;backdrop-filter:blur(14px)!important;border:1px solid rgba(255,255,255,.16)!important}
+#twocode-ai-monitor.twocode-glassy .gl-chip:hover{background:rgba(255,255,255,.18)!important;border-color:rgba(255,255,255,.28)!important}
+#twocode-ai-monitor.twocode-glassy .am-gemini-menu{background:rgba(20,24,28,.88)!important;backdrop-filter:blur(30px)!important;border-color:rgba(255,255,255,.2)!important}
+#twocode-ai-monitor.cl-new .ch-model-menu.am-gemini-menu{top:auto;bottom:34px;right:0;width:370px;max-height:220px;padding:8px 10px;border-radius:14px;background:#141715;border:1px solid rgba(255,255,255,.14);box-shadow:0 16px 36px rgba(0,0,0,.7);display:flex;flex-direction:column;gap:6px;z-index:50;box-sizing:border-box}
+#twocode-ai-monitor .am-gemini-menu .ch-model-head{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;font-weight:700;color:#fff;padding:0 2px}
+#twocode-ai-monitor .am-gemini-menu .ch-model-head small{font-size:10px;color:#9aa596}
+#twocode-ai-monitor .am-gemini-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+#twocode-ai-monitor .am-gemini-card{padding:6px 8px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:2px;cursor:default;transition:all .15s ease}
+#twocode-ai-monitor .am-gemini-card:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.18)}
+#twocode-ai-monitor .am-gemini-card.on{background:rgba(66,133,244,.15);border-color:rgba(66,133,244,.4)}
+#twocode-ai-monitor .am-gemini-card b{font-size:11px;font-weight:600;color:#fff;line-height:1.2}
+#twocode-ai-monitor .am-gemini-card small{font-size:9.5px;line-height:1.2;color:rgba(255,255,255,.65)}
+#twocode-ai-monitor .am-gemini-foot{margin:0;font-size:10px;color:rgba(255,255,255,.6);line-height:1.3;padding:0 2px}
+@media(prefers-reduced-motion:reduce){#twocode-ai-monitor.cl-new .gl-tile > .gl-ico.live svg,#twocode-ai-monitor.cl-new .gl-steps .n i::after,#twocode-ai-monitor.cl-new .gl-think span,#twocode-ai-monitor.cl-new .gl-card{animation:none}}
 @media(prefers-reduced-motion:reduce){#twocode-ai-monitor .ch-typing i{animation:none}#twocode-ai-monitor .cx-light i.blink,#twocode-ai-monitor .am-blink,#twocode-ai-monitor .am-wave{animation:none}}
 `; document.head.appendChild(style);
   const escape = text => String(text || '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
@@ -580,13 +619,14 @@
   const lamp = p => `<span class="am-dot ${busy(p) ? 'am-blink' : ''}" style="--lamp:${colourOf(p.state)}"></span>`;
   // After you have looked at Claude Code, green/red/question go quiet again (eyes back to normal).
   function markSeen() {
-    if (currentView === 'monitor' && ['claudecode', 'codex'].includes(selected) && api.aiMonitorHooksSeen) api.aiMonitorHooksSeen().then(update).catch(() => {});
+    if (currentView === 'monitor' && ['claudecode', 'codex', 'antigravity'].includes(selected) && api.aiMonitorHooksSeen) api.aiMonitorHooksSeen().then(update).catch(() => {});
   }
   function open(provider, exact) {
-    // Claude Code, Codex, Claude or ChatGPT (the switch at the top of the page).
+    // Claude Code, Codex, Antigravity, Claude or ChatGPT (the switch at the top of the page).
     // the AI tile on the home screen opens whichever AI has something to tell right now
-    if (!exact && provider === 'claudecode' && top() && top().provider !== 'claudecode') provider = top().provider;
-    const next = Object.hasOwn(names, provider) ? provider : 'claudecode';
+    if (!provider) provider = 'antigravity';
+    if (!exact && (provider === 'claudecode' || provider === 'antigravity') && top() && top().provider !== provider) provider = top().provider;
+    const next = Object.hasOwn(names, provider) ? provider : 'antigravity';
     if (next !== selected) markSeen();
     selected = next; choosing = false; error = ''; render();
     setView('monitor'); setMode('expanded'); lastActivity = performance.now();
@@ -632,8 +672,49 @@
     for (const b of root.querySelectorAll('[data-model]')) b.addEventListener('click', () => { modelMenu = false; hooks('aiMonitorHooksModel', b.dataset.model); });
     root.querySelector('#am-plan-note')?.addEventListener('focus', () => { projectInputFocused = true; sendInteractive(true); });
     bind('am-allow',() => hooks('aiMonitorHooksDecide', p?.sessionId, 'allow')); bind('am-deny', () => hooks('aiMonitorHooksDecide', p?.sessionId, 'deny'));
+    for (const b of root.querySelectorAll('.am-capsule[data-sid]')) b.addEventListener('click', () => hooks('aiMonitorHooksSelect', b.dataset.sid));
     for (const button of root.querySelectorAll('[data-provider]')) button.addEventListener('click', () => open(button.dataset.provider));
     for (const button of root.querySelectorAll('[data-window]')) button.addEventListener('click', () => connect(windows[Number(button.dataset.window)]?.id));
+
+    const isGlassy = (typeof window.__twocodeIsGlassy === 'function' && window.__twocodeIsGlassy()) || localStorage.getItem('twocode:glassy') === '1';
+    root.classList.toggle('twocode-glassy', isGlassy);
+    document.body.classList.toggle('twocode-glassy', isGlassy);
+
+    bind('am-glass-toggle', () => {
+      const next = localStorage.getItem('twocode:glassy') === '1' ? '0' : '1';
+      localStorage.setItem('twocode:glassy', next);
+      root.classList.toggle('twocode-glassy', next === '1');
+      document.body.classList.toggle('twocode-glassy', next === '1');
+      sound('click');
+      render();
+    });
+
+    const capsulesEl = root.querySelector('.am-capsules');
+    if (capsulesEl) {
+      capsulesEl.addEventListener('wheel', e => {
+        if (e.deltaY) {
+          e.preventDefault();
+          capsulesEl.scrollLeft += e.deltaY;
+        }
+      }, { passive: false });
+    }
+
+    const updateMarquees = () => {
+      root.querySelectorAll('.gl-marquee-text').forEach(el => {
+        const parent = el.parentElement;
+        if (!parent) return;
+        const diff = el.scrollWidth - parent.clientWidth;
+        if (diff > 4) {
+          el.style.setProperty('--scroll-dist', `-${diff + 16}px`);
+          el.classList.add('scrolling');
+        } else if ((el.textContent || '').length <= 20) {
+          el.classList.remove('scrolling');
+        }
+      });
+    };
+    updateMarquees();
+    requestAnimationFrame(updateMarquees);
+    setTimeout(updateMarquees, 150);
     const fresh = root.querySelector('textarea');
     if (fresh) {
       fresh.value = drafts.get(key(p)) || ''; fresh.disabled = pending;
@@ -684,8 +765,33 @@
   // Which Claude model Claude Code uses (written to Claude Code's settings.json by the main process).
   const MODEL_INFO = { default: [window.__twocodePrefs?.().lang === 'en' ? 'Default' : 'Standaard', 'Wat Claude Code zelf kiest'], opus: ['Opus', 'Het slimst, voor moeilijke klussen'], sonnet: ['Sonnet', 'Snel en slim, voor de meeste dingen'],
     haiku: ['Haiku', 'Supersnel, voor kleine dingen'], opusplan: ['Opus plan', 'Opus plant, Sonnet bouwt'] };
+  const GEMINI_MODELS = {
+    'gemini-3.8': ['Gemini 3.8 Flash', 'Standaardmodel voor Antigravity 2.0 (snel en krachtig)'],
+    'gemini-3.8-thinking': ['Gemini 3.8 Thinking', 'Geavanceerd redeneren en diepe planning'],
+    'gemini-2.5-pro': ['Gemini 2.5 Pro', 'Complexe codeer- en architectuurtaken'],
+    'gemini-2.5-flash': ['Gemini 2.5 Flash', 'Lichtgewicht en ultrasnel']
+  };
+  const GEMINI_MODELS_EN = {
+    'gemini-3.8': ['Gemini 3.8 Flash', 'Default model for Antigravity 2.0 (fast & powerful)'],
+    'gemini-3.8-thinking': ['Gemini 3.8 Thinking', 'Deep reasoning and complex planning'],
+    'gemini-2.5-pro': ['Gemini 2.5 Pro', 'Complex coding and architecture tasks'],
+    'gemini-2.5-flash': ['Gemini 2.5 Flash', 'Lightweight and ultra-fast']
+  };
   let modelMenu = false;
   function modelPicker(p) {
+    if (p.agent === 'antigravity') {
+      const activeRaw = p.modelNow || p.model || 'gemini-3.8';
+      const cleanActive = String(activeRaw)
+        .replace(/^gemini-/i, 'Gemini ')
+        .replace(/-flash-high/i, ' 3.8 Flash')
+        .replace(/-/g, ' ');
+      const button = `<button type="button" class="ch-model gl-chip" id="am-model" aria-expanded="${modelMenu}" title="${T('Antigravity Gemini model', 'Antigravity Gemini model')}"><em>Model</em>${escape(cleanActive)}<span>▾</span></button>`;
+      const models = EN() ? GEMINI_MODELS_EN : GEMINI_MODELS;
+      const menu = !modelMenu ? '' : `<div class="ch-model-menu am-gemini-menu" role="menu"><div class="ch-model-head"><span>${T('Welk model gebruikt Antigravity?', 'Which model does Antigravity use?')}</span>${p.modelNow ? `<small>${T('Nu in gebruik', 'In use')}: ${escape(cleanActive)}</small>` : ''}</div><div class="am-gemini-grid">${
+        Object.entries(models).map(([key, [name, info]]) => `<div class="am-gemini-card ${cleanActive.toLowerCase().includes(name.toLowerCase().replace('gemini ', '')) ? 'on' : ''}"><b>${name}</b><small>${info}</small></div>`).join('')
+      }</div><p class="am-gemini-foot">${T('Kies je model linksonder in het Antigravity-venster.', 'Choose your model in the bottom-left of Antigravity.')}</p></div>`;
+      return { button, menu };
+    }
     const current = p.model || 'default', label = (current === 'default' ? T('Standaard', 'Default') : null) || MODEL_INFO[current]?.[0] || String(current).replace(/^custom:/, '');
     const button = `<button type="button" class="ch-model gl-chip" id="am-model" aria-expanded="${modelMenu}" title="Kies welk Claude-model Claude Code gebruikt"><em>Model</em>${escape(label)}<span>▾</span></button>`;
     const menu = !modelMenu ? '' : `<div class="ch-model-menu" role="menu"><div class="ch-model-head">Welk model gebruikt Claude?${p.modelNow ? `<small>Nu in gebruik: ${escape(p.modelNow)}</small>` : ''}</div>${
@@ -732,13 +838,16 @@
     const timer = busy(p) ? ` · <b class="cx-timer" data-live="1" data-base="${p.elapsed || 0}" data-at="${Date.now()}">${clock(p.elapsed || 0)}</b>` : '';
     const calm = p.agent === 'codex' ? '#5b9bff' : '#e8865a', lampOf = x => ['ready', 'disconnected', 'connecting'].includes(x) ? calm : colourOf(x); // quiet = the AI's own colour, not grey
     const pill = p.connected ? `<span class="ch-status" style="--lamp:${lampOf(st)}"><i class="${busy(p) ? 'am-blink' : ''}"></i>${statusText}${timer}</span>` : '';
-    const jump = p.canJump ? `<button type="button" class="cx-jump" id="am-jump" title="Breng het ${escape(p.name)}-venster naar voren">Naar terminal <span>↗</span></button>` : '';
+    const jump = p.canJump ? `<button type="button" class="cx-jump" id="am-jump" title="Breng het ${escape(p.name)}-venster naar voren">${p.agent === 'antigravity' ? 'Naar Antigravity' : 'Naar terminal'} <span>↗</span></button>` : '';
     const picker = p.connected && p.agent !== 'codex' ? modelPicker(p) : { button: '', menu: '' }; // the Claude model choice is for Claude Code only
     const head = p.connected
       ? `<div class="tc-page-head"><div class="cc-pill"><i style="--lamp:${lampOf(st)}" class="${busy(p) ? 'am-blink' : ''}"></i>${escape(project || p.name)}${project ? `<span>· ${escape(p.name)}</span>` : ''}</div><div class="ch-head-right">${picker.button}${pill}${jump}</div></div>${picker.menu}`
       : `<div class="tc-page-head"><div><p class="cc-kicker">${escape(p.name)}</p><p class="tc-page-title">${escape(project || p.name)}</p></div><div class="ch-head-right">${picker.button}${pill}${jump}</div></div>${picker.menu}`;
     if (!p.connected) {
       if (p.agent === 'codex' && p.available === false) return head + `<div class="cc-card cc-wide"><p class="cc-big">Codex staat nog niet op deze pc</p><p class="am-hint">Installeer Codex (de AI-programmeerhulp van OpenAI) en open hem één keer. Kom daarna hier terug om hem te koppelen.</p></div>`;
+      if (p.agent === 'antigravity') {
+        return head + `<div class="cc-card cc-wide"><p class="cc-big">Antigravity 2.0 gekoppeld</p><p class="am-hint">TwoCode volgt je Antigravity 2.0 sessies live via hooks. Geef een opdracht in Antigravity om live acties te volgen.</p></div>`;
+      }
       return head + `<div class="cc-card cc-wide"><p class="cc-big">Zie meteen wat ${escape(p.name)} doet</p><p class="am-hint">Bezig, een vraag, klaar of een fout: TwoCode laat het zien${p.agent === 'codex' ? ', terwijl jij iets anders doet' : ', ook als je Claude Code vanaf je telefoon bestuurt'}.</p>${
         p.error ? `<p class="am-error">${escape(p.error)}</p>` : p.hooksInstalled ? '<p class="am-hint">Gekoppeld. Even wachten tot TwoCode klaar is met starten.</p>'
           : `<button type="button" class="am-primary" id="am-open-connect">Koppelen in TwoCode</button><p class="am-hint">Eén schakelaar in TwoCode → Verbindingen. Daarna doet TwoCode de rest.</p>`}</div>`;
@@ -747,24 +856,36 @@
     // ---- the glow, like the music page: black at the top, the colour of what happens rising from the bottom (glowOf, drawn
     // on the island). Left one big thing (the time, or how many jobs today), right a frosted card with what happens now
     // (the code, the terminal, the steps, his answer, his question); at the bottom how far he is. ----
+    const capsules = (p.list && p.list.length > 1)
+      ? `<div class="am-capsules">${p.list.map(item => `
+          <button type="button" class="am-capsule ${item.active ? 'active' : ''}" data-sid="${escape(item.id)}" title="${escape(item.title || item.project)}">
+            <i class="am-cap-dot ${item.state === 'running' ? 'blink' : ''}" style="--lamp:${colourOf(item.state)}"></i>
+            <span class="am-cap-name">${escape(item.title || item.project)}</span>
+            ${item.elapsed ? `<span class="am-cap-time">${clock(item.elapsed)}</span>` : ''}
+          </button>`).join('')}</div>`
+      : '';
     const steps = p.steps || [], working = busy(p), failed = ['error', 'stopped'].includes(st);
     const idle = !working && !p.prompt && !['done', 'question', 'error', 'stopped'].includes(st);
-    const MARK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 4v16M4 12h16M6.3 6.3l11.4 11.4M17.7 6.3 6.3 17.7"/></svg>';
+    const MARK = p.agent === 'antigravity'
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C12 7.5 7.5 12 2 12C7.5 12 12 16.5 12 22C12 16.5 16.5 12 22 12C16.5 12 12 7.5 12 2Z"/></svg>'
+      : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 4v16M4 12h16M6.3 6.3l11.4 11.4M17.7 6.3 6.3 17.7"/></svg>';
     const CHECK = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>';
     const CROSS = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
     const where = escape(project || p.name);
-    const tile = `<div class="gl-tile"><span class="${working ? 'live' : ''}">${MARK}</span>${where}</div>`;
+    const isLong = where.length > 20;
+    const estDist = Math.max(40, (where.length - 18) * 8.5);
+    const tile = `<div class="gl-tile" title="${where}"><span class="gl-ico ${working ? 'live' : ''}">${MARK}</span><div class="gl-marquee"><div class="gl-marquee-text ${isLong ? 'scrolling' : ''}" style="--scroll-dist:-${estDist}px">${where}</div></div></div>`;
     const two = (noId, noLabel, yesId, yesLabel) => `<div class="gl-two"><button type="button" class="gl-no" id="${noId}" ${off}>${noLabel}</button><button type="button" class="gl-yes" id="${yesId}" ${off}>${yesLabel}</button></div>`;
     // Claude needs you: the question big on the left, what he wants to do in the card, two same-size buttons
     if (p.permission || p.ask || p.plan) {
       const lastAsk = steps[steps.length - 1], editAsk = p.permission && p.code && lastAsk?.kind === 'edit' && lastAsk.state === 'running';
       claudeTall = Boolean(editAsk || p.plan || p.ask);
-      if (p.permission && !p.ask && !p.plan) return `<div class="gl-main"><div class="gl-l">${tile}<p class="gl-big word">${T('Mag dit?', 'May I?')}</p><p class="gl-sub">${escape(p.permission.tool || T('Claude wil iets doen', 'Claude wants to do something'))}</p></div>`
+      if (p.permission && !p.ask && !p.plan) return capsules + `<div class="gl-main"><div class="gl-l">${tile}<p class="gl-big word">${T('Mag dit?', 'May I?')}</p><p class="gl-sub">${escape(p.permission.tool || T(p.name + ' wil iets doen', p.name + ' wants to do something'))}</p></div>`
         + `<div class="gl-card">${editAsk ? codePanel(p.code, 6) : `<div class="gl-cmd"><span>$</span>${escape(p.permission.what || p.permission.tool)}</div>`}</div></div>`
         + two('am-deny', CROSS + T('Weigeren', 'Deny'), 'am-allow', CHECK + T('Toestaan', 'Allow'));
-      if (p.plan) return `<div class="gl-col">${tile}<p class="gl-title">${T('Claude heeft een plan', 'Claude has a plan')}</p><div class="gl-card gl-scroll am-plan">${planHtml(p.plan)}</div>`
+      if (p.plan) return capsules + `<div class="gl-col">${tile}<p class="gl-title">${T(p.name + ' heeft een plan', p.name + ' has a plan')}</p><div class="gl-card gl-scroll am-plan">${planHtml(p.plan)}</div>`
         + `<input id="am-plan-note" class="gl-note" maxlength="4000" placeholder="${T('Wat moet er anders? (mag leeg)', 'What should change? (optional)')}">${two('am-plan-no', T('Aanpassen', 'Change it'), 'am-plan-ok', T('Goedkeuren', 'Approve'))}</div>`;
-      return `<div class="gl-col">${tile}<p class="gl-title">${T('Claude vraagt iets', 'Claude asks something')}</p><div class="gl-card gl-scroll">${askForm(p)}</div></div>`;
+      return capsules + `<div class="gl-col">${tile}<p class="gl-title">${T(p.name + ' vraagt iets', p.name + ' asks something')}</p><div class="gl-card gl-scroll">${askForm(p)}</div></div>`;
     }
     const phase = st === 'done' ? 3 : steps.reduce((m, x) => Math.max(m, x.kind === 'edit' ? 1 : x.kind === 'run' ? 2 : 0), 0);
     const doing = !steps.length ? T('Denkt na', 'Thinking') : [T('Code lezen', 'Reading code'), T('Aanpassen', 'Making changes'), T('Tests draaien', 'Running tests')][Math.min(2, phase)];
@@ -775,15 +896,22 @@
     let big, word = false, sub, card;
     if (idle) {
       big = String(today); sub = T(today === 1 ? 'klus gedaan vandaag' : 'klussen gedaan vandaag', today === 1 ? 'job done today' : 'jobs done today');
-      card = past.length ? `<p class="gl-cap">${T('Laatst gedaan', 'Recently')}</p>` + past.slice(0, 3).map(h => { const [cls, g] = RES[h.result] || ['', '•'];
-        return `<div class="gl-row h"><i class="gl-dot ${cls}">${g}</i><b>${escape(h.prompt)}</b><em>${escape(new Date(h.at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))}</em></div>`; }).join('')
-        : `<div class="gl-empty">${T(`Geef ${escape(p.name)} een klus in je terminal. Hier zie je dan live wat hij doet: de code, de tests en zijn antwoord.`, `Give ${escape(p.name)} a job in your terminal. You'll see what it does here, live: the code, the tests and its answer.`)}</div>`;
+      const pastDistinct = [];
+      for (const h of past) {
+        if (!pastDistinct.some(x => x.prompt === h.prompt || (x.project && x.project === h.project))) {
+          pastDistinct.push(h);
+        }
+        if (pastDistinct.length >= 25) break;
+      }
+      card = pastDistinct.length ? `<p class="gl-cap">${T('Laatst gedaan', 'Recently')}</p><div class="gl-tasks-scroll">` + pastDistinct.map(h => { const [cls, g] = RES[h.result] || ['', '•'];
+        return `<div class="gl-row h" title="${escape(h.prompt)}"><i class="gl-dot ${cls}">${g}</i><b>${escape(h.prompt)}</b><em>${escape(new Date(h.at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }))}</em></div>`; }).join('') + `</div>`
+        : `<div class="gl-empty">${T(`Geef ${escape(p.name)} een klus in ${p.agent === 'antigravity' ? 'Antigravity' : 'je terminal'}. Hier zie je dan live wat hij doet: de code, de tests en zijn antwoord.`, `Give ${escape(p.name)} a job in ${p.agent === 'antigravity' ? 'Antigravity' : 'your terminal'}. You'll see what it does here, live: the code, the tests and its answer.`)}</div>`;
     } else if (st === 'question') {
-      big = T('Jouw beurt', 'Your turn'); word = true; sub = T('Claude wacht op je antwoord', 'Claude is waiting for you');
-      card = `<div class="gl-md md">${md(p.question || p.lastMessage || T('Claude heeft je nodig in de terminal.', 'Claude needs you in the terminal.'))}</div>`;
+      big = T('Jouw beurt', 'Your turn'); word = true; sub = T(p.name + ' wacht op je antwoord', p.name + ' is waiting for you');
+      card = `<div class="gl-md md">${md(p.question || p.lastMessage || T(p.name + ' heeft je nodig.', p.name + ' needs you.'))}</div>`;
     } else if (st === 'done') {
       big = p.elapsed ? clock(p.elapsed) : T('Klaar', 'Done'); word = !p.elapsed; sub = T('Klaar · alle stappen gedaan', 'Done · every step');
-      card = `<div class="gl-md md">${p.lastMessage ? md(p.lastMessage) : T('Klaar. Zijn antwoord staat in de terminal.', 'Done. The answer is in the terminal.')}</div>`;
+      card = `<div class="gl-md md">${p.lastMessage ? md(p.lastMessage) : T('Klaar. Het antwoord staat klaar.', 'Done. The answer is ready.')}</div>`;
     } else if (failed) {
       big = T('Gestopt', 'Stopped'); word = true; sub = escape(p.detail || T('Er ging iets mis', 'Something went wrong'));
       card = `<div class="gl-md"><b>${escape(p.detail || T('Er ging iets mis', 'Something went wrong'))}</b><br>${T('Kijk in de terminal wat er misging.', 'Check the terminal to see what went wrong.')}</div>`;
@@ -792,7 +920,7 @@
       sub = `${doing} · ${T(`stap ${Math.min(4, phase + 1)} van 4`, `step ${Math.min(4, phase + 1)} of 4`)}`;
       card = lastStep?.kind === 'edit' && p.code ? codePanel(p.code, 3)
         : lastStep?.kind === 'run' && p.run ? termPanel(p.run)
-        : !steps.length ? `<div class="gl-think">${p.prompt ? `<p>“${escape(p.prompt)}”</p>` : ''}<span>${T('Claude denkt na…', 'Claude is thinking…')}</span></div>`
+        : !steps.length ? `<div class="gl-think">${p.prompt ? `<p>“${escape(p.prompt)}”</p>` : ''}<span>${T(p.name + ' denkt na…', p.name + ' is thinking…')}</span></div>`
         : steps.slice(-3).map(x => { const now = x.state === 'running';
           return `<div class="gl-row${now ? '' : ' d'}"><i class="ic">${svg(x.kind, 12)}</i><b>${(now ? NOW : PAST)[x.kind] || ''}</b><code>${escape(shortWhat(x.kind, x.what))}</code>${now ? '<span class="gl-spin"></span>' : `<span class="gl-ok">${CHECK}</span>`}</div>`; }).join('');
     }
@@ -802,9 +930,11 @@
     const compose = p.canReply && !p.ask && !p.plan && !p.permission
       ? `<div class="ch-compose gl-compose"><textarea id="am-answer" maxlength="5000" placeholder="${st === 'question' ? T('Jouw antwoord…', 'Your answer…') : T('Typ iets voor Claude…', 'Type something for Claude…')}" aria-label="${T('Bericht aan Claude Code', 'Message to Claude Code')}"></textarea><button type="button" id="am-send" aria-label="${T('Stuur', 'Send')}" title="${T('Stuur (Enter)', 'Send (Enter)')}">↑</button></div>` : '';
     const limit = five ? `<div class="gl-limit">${T('5-uurslimiet', '5-hour limit')}<i><s style="width:${Math.min(100, five.used)}%"></s></i><b>${five.used}%</b></div>` : '<span></span>';
-    const term = p.canJump ? `<button type="button" class="gl-chip" id="am-jump" title="${T('Breng de terminal naar voren', 'Bring the terminal to the front')}">Terminal<em>↗</em></button>` : '';
-    const foot = `<div class="gl-foot">${idle ? limit : compose || stepBar}<span class="gl-tools">${idle ? picker.button : ''}${term}</span>${idle ? picker.menu : ''}</div>`;
-    return `<div class="gl-main"><div class="gl-l">${tile}<p class="gl-big${word ? ' word' : ''}">${big}</p><p class="gl-sub">${sub}</p></div><div class="gl-card">${card}</div></div>${foot}`;
+    const isGlassy = (typeof window.__twocodeIsGlassy === 'function' && window.__twocodeIsGlassy()) || localStorage.getItem('twocode:glassy') === '1';
+    const glassToggle = `<button type="button" class="gl-chip" id="am-glass-toggle" title="${T('Wissel tussen mat glas en pikzwart', 'Toggle frosted glass / solid black')}">${isGlassy ? '✨ Glassy' : '◼ Solid'}</button>`;
+    const term = p.canJump ? `<button type="button" class="gl-chip" id="am-jump" title="${T('Breng het ' + escape(p.name) + '-venster naar voren', 'Bring ' + escape(p.name) + ' to front')}">${p.agent === 'antigravity' ? 'Antigravity' : 'Terminal'}<em>↗</em></button>` : '';
+    const foot = `<div class="gl-foot">${idle ? limit : compose || stepBar}<span class="gl-tools">${idle ? picker.button : ''}${glassToggle}${term}</span>${idle ? picker.menu : ''}</div>`;
+    return capsules + `<div class="gl-main"><div class="gl-l">${tile}<p class="gl-big${word ? ' word' : ''}">${big}</p><p class="gl-sub">${sub}</p></div><div class="gl-card">${card}</div></div>${foot}`;
   }
   // "Gelezen 3 · bewerkt 2 · opdrachten 1" for this turn.
   function statsLine(stats = {}) {
@@ -888,7 +1018,7 @@
   // Done: a steady blue until you look at it (open the Claude page), then green that slowly fades away.
   let doneKey = '', doneSeenAt = 0;
   const DONE_BLUE = '#0a84ff', DONE_FADE = 2800;
-  const claudeHooks = () => providers().find(q => q.kind === 'hooks' && q.agent !== 'codex' && q.connected) || providers().find(q => q.kind === 'hooks' && q.connected);
+  const claudeHooks = () => providers().find(q => q.kind === 'hooks' && q.connected) || providers().find(q => q.kind === 'hooks');
   window.__twocodeDoneLook = p => { // null, or { colour, k } (k: how strong the glow is, 0..1)
     if (!p || p.state !== 'done' || p.permission) return null;
     if (!doneSeenAt) return { colour: DONE_BLUE, k: 1, fresh: true };
@@ -943,23 +1073,37 @@
     window.__twocodeChime?.('pop'); oldSetMode(on ? 'rest' : 'compact', false); if (on) holdClosed = true;
   }
   const claudeWorking = () => { const p = top(); return Boolean(p && busy(p)); }; // a running task is a Live Activity: it stays in view, small
+  // for the tucked-away island (tuck-ui.js): the colour of its thin line, and whether Claude or Codex needs you
+  window.__twocodeIslandState = () => ({ needsYou: needsAnswer(), working: claudeWorking(), done: top()?.state === 'done', music: music() });
   const medium = () => (music() && !musicTucked) || Boolean(window.__twocodeFocus?.active()) || Boolean(window.__twocodeCompactMessage?.()) || needsAnswer() || claudeWorking();
   window.__twocodeStatus = () => top();
   let holdClosed = false;
   window.__twocodeHoldClosed = () => { holdClosed = true; };
   // While Claude waits for an answer the small island pops open and gets wider (room for the buttons).
   let wideFor = false;
+  // A song with lyrics (lyrics-ui.js) makes the small island wider too: room for the line that is sung.
+  const lyricsWide = () => Boolean(window.__twocodeLyrics?.has()) && music() && !musicTucked && !window.__twocodeFocus?.active() && !claudeWorking() && !needsAnswer();
+  const compactWidth = () => needsAnswer() ? 440 : lyricsWide() ? window.__twocodeLyrics.width() : 300;
+  function lyricSize() {
+    const w = compactWidth();
+    if (w !== UI.COMPACT_W) UI.COMPACT_W = w;
+    if (mode === 'compact' && !transition && Math.abs(visual.width - w) > 1) oldSetMode('compact', false);
+  }
   function askSize() {
     const want = needsAnswer();
     if (want === wideFor) return; wideFor = want;
-    UI.COMPACT_W = want ? 440 : 300;
+    UI.COMPACT_W = compactWidth();
     if (want && mode !== 'expanded') oldSetMode('compact', false);
     else if (!want && mode === 'compact') { oldSetMode('compact', false); settleSize(); }
   }
   const oldTargetHeight = targetHeight, oldSetMode = setMode, oldDrawExpanded = drawExpanded, oldDrawSmall = drawSmall, oldHover = updateHover;
   targetHeight = function () { return ['monitor', 'assistant'].includes(currentView) ? (claudeTall ? 318 : 270) : oldTargetHeight(); };
   // While music plays, the island rests at medium size so the sound wave stays visible.
-  setMode = function (next, playSound = true) { return oldSetMode(next === 'rest' && medium() ? 'compact' : next, playSound); };
+  let hoverOpening = false;
+  setMode = function (next, playSound = true) {
+    if (next === 'expanded' && hoverOpening && mode === 'compact' && lyricsWide() && currentView !== 'spotify') setView('spotify'); // a song with lyrics: its page, with the lines before and after
+    return oldSetMode(next === 'rest' && medium() ? 'compact' : next, playSound);
+  };
   function settleSize() {
     if (!introFinished || pointer.known && inside(pointer.x, pointer.y, islandBounds)) return;
     if (medium() && mode === 'rest') setMode('compact', false);
@@ -970,7 +1114,7 @@
   // the Claude page's glow, only while something happens: Claude's own colour while he works, green when he is done
   // (quiet, waiting for you or stopped: plain black)
   const glowOf = p => { if (!p?.connected || p.kind !== 'hooks' || p.permission) return null;
-    if (busy(p)) return { colour: p.agent === 'codex' ? '#3b82f6' : '#d97757', k: 1 };
+    if (busy(p)) return { colour: p.agent === 'codex' ? '#3b82f6' : (p.agent === 'antigravity' ? '#4285f4' : '#d97757'), k: 1 };
     return window.__twocodeDoneLook(p); };
   drawExpanded = function (alpha) {
     if (currentView === 'shortcuts') { drawHeader(alpha); drawShortcuts(contentRect()); return; }
@@ -1047,8 +1191,13 @@
   }
   drawSmall = function () {
     hit.musicTuck = null; tuckBox = null;
+    window.__twocodeLyrics?.tick();
+    // opening or closing (the island is still narrow): only Robo's eyes, like the resting island. The old drawing for this
+    // moment was a small robot head, which flashed at the top every time the island opened.
+    if (mode === 'expanded') { (window.__twocodeIslandEyes || drawGhost)(islandBounds.x + islandBounds.width / 2, 16.5); return; }
+    if (mode === 'rest' && window.__twocodeRestFace?.on()) { window.__twocodeRestFace.draw(); return; } // the time, CPU or memory instead of the eyes (rest-ui.js)
     if (mode !== 'compact') { oldDrawSmall(); songLine(); return; }
-    songLine();
+    songLine(); lyricSize();
     // Like the iPhone's Dynamic Island: Robo's eyes in the middle (the camera), the leading and trailing parts snug
     // against them, in one colour for one activity (Apple: design leading + trailing as one unit).
     const H = islandBounds.height, cy = H / 2, right = islandBounds.x + islandBounds.width - 14, left = islandBounds.x + 14, mid = islandBounds.x + islandBounds.width / 2;
@@ -1067,6 +1216,10 @@
     const mark = () => { ctx.save(); ctx.strokeStyle = '#d97757'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; for (let i = 0; i < 4; i++) { const an = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(left + 7 - Math.cos(an) * 6.5, cy - Math.sin(an) * 6.5); ctx.lineTo(left + 7 + Math.cos(an) * 6.5, cy + Math.sin(an) * 6.5); ctx.stroke(); } ctx.restore(); };
     const colourFor = () => '#ffffff'; // calm: the words are white, Robo's eyes carry the state's colour
 
+    if (message && !message.trim()) { // hello and goodbye (twocode-fun.js keep the island open with a space): Robo is the show, big in the middle
+      (window.__twocodeIslandEyes || drawGhost)(mid, cy + 0.5, 1.35); hit.ghost = { x: mid - 26, y: 0, width: 52, height: H };
+      return;
+    }
     if (message) {
       const volume = /^(\S+) [▮▯]{10} (\d+)%$/u.exec(message); // the volume (extras-ui.js): a real bar instead of block characters
       if (volume) { drawVolume(volume[1], Number(volume[2]), left, cy, right); return; }
@@ -1117,7 +1270,28 @@
       const cs = H - 12;
       if (albumImage?.complete && albumImage.naturalWidth) { ctx.save(); ctx.beginPath(); ctx.roundRect(left - 6, cy - cs / 2, cs, cs, 7); ctx.clip(); ctx.drawImage(albumImage, left - 6, cy - cs / 2, cs, cs); ctx.restore(); }
       else { box(left - 6, cy - cs / 2, cs, cs, 7, '#1c1c1e'); window.__twocodeIcon?.('music', left - 6 + cs / 2, cy, 14, '#8e8e93', null, 'rgba(0,0,0,0)'); }
-      eyes();
+      // the line that is sung now, between the cover and the wave. A new line rolls in from below while the old one rolls
+      // out at the top, in a narrow band, so two lines never stand on top of each other; Robo's eyes fade in during the
+      // breaks (and out when the singing starts again)
+      const lyric = lyricsWide() ? window.__twocodeLyrics.now() : null;
+      if (lyric && (lyric.text || lyric.previous)) {
+        const x0 = left - 6 + cs + 12, x1 = right - 36 - 12, w = x1 - x0, band = 20, k = lyric.k;
+        const line = (s, dy) => {
+          const alpha = Math.max(0, 1 - Math.abs(dy) / band); // fades as it leaves the band
+          if (!s || alpha <= 0.01) return;
+          ctx.save(); ctx.globalAlpha *= alpha; ctx.font = lyric.font;
+          let t = s; while (t.length > 1 && ctx.measureText(t).width > w) t = t.slice(0, -2) + '…';
+          ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x0 + w / 2, cy + 0.5 + dy); ctx.restore();
+        };
+        if (!lyric.text || !lyric.previous) { // from the eyes to a line, or from a line to the eyes: one after the other
+          const ek = lyric.text ? Math.max(0, 1 - k / 0.35) : Math.max(0, (k - 0.65) / 0.35); // the eyes only while no words are in the band
+          if (ek > 0.01) { ctx.save(); ctx.globalAlpha *= ek; (window.__twocodeIslandEyes || drawGhost)(mid, cy + 0.5); ctx.restore(); }
+        }
+        ctx.save(); ctx.beginPath(); ctx.rect(x0 - 4, cy - band / 2 - 2, w + 8, band + 4); ctx.clip();
+        line(lyric.previous, -band * k);
+        line(lyric.text, band * (1 - k));
+        ctx.restore();
+      } else eyes();
       window.__twocodeVisualizer?.('compact', right - 36, cy, 36, 18, window.__twocodeAlbumColour || '#ffffff', 6);
       return;
     }
@@ -1182,7 +1356,7 @@
     if (mode === 'compact' && pointer.known && inside(pointer.x, pointer.y, tuckBox)) { hoverStartedAt = null; return; }
     const pa = top(); // (only when there are buttons to press; a plain question just opens on hover)
     if (mode === 'compact' && pa && (pa.permission || pa.ask || pa.plan) && pointer.known && inside(pointer.x, pointer.y, islandBounds)) { hoverStartedAt = null; return; }
-    return oldHover(now);
+    hoverOpening = true; try { return oldHover(now); } finally { hoverOpening = false; } // see setMode: a song with lyrics opens its page
   };
   // ---- Home: a small dashboard. TwoCode on the left, three live widgets: music, Claude, focus ----
   const baseHomeHeight = targetHeight;
@@ -1368,7 +1542,8 @@
     const claude = { id: 'claude', size: 'L' };
     return arrange(swap ? [...old.slice(0, 2), claude, ...old.slice(2)] : [claude, ...old]).placed.filter(w => !w.hidden);
   }
-  const getWidgets = () => widgets || (widgets = loadWidgets());
+  // apps you turned off (Settings → Apps) have no tile on Home (their place stays free until you move things)
+  const getWidgets = () => (widgets || (widgets = loadWidgets())).filter(w => installed(w.id));
   function saveWidgets(placed) {
     widgets = placed.filter(w => !w.hidden).map(({ id, size, c, r }) => ({ id, size, c, r }));
     try { localStorage.setItem('twocode:widgets', JSON.stringify(widgets)); } catch {}
@@ -1452,7 +1627,7 @@
     else { ctx.save(); ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.strokeStyle = dot; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
   }
   // Each AI has its own colour (the same as in TwoCode → Verbindingen).
-  const AI_COLOUR = { claudecode: '#d97757', codex: '#3b82f6', claude: '#e8a87c', chatgpt: '#10a37f' };
+  const AI_COLOUR = { antigravity: '#4285f4', claudecode: '#d97757', codex: '#3b82f6', claude: '#e8a87c', chatgpt: '#10a37f' };
   // All chats going on at once, across AIs: every Claude Code / Codex session, plus the ChatGPT and Claude chats.
   function activeChats() {
     const out = [];
@@ -1765,6 +1940,20 @@
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * r, y - Math.sin(a) * r); ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); ctx.stroke(); }
     ctx.restore();
   }
+  function geminiMark(x, y, colour, size = 16) {
+    ctx.save();
+    const r = size * 0.52;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.quadraticCurveTo(x, y, x, y + r);
+    ctx.quadraticCurveTo(x, y, x - r, y);
+    ctx.quadraticCurveTo(x, y, x, y - r);
+    ctx.closePath();
+    ctx.fillStyle = colour;
+    ctx.fill();
+    ctx.restore();
+  }
   const phaseOf = steps => steps.reduce((m, s) => Math.max(m, s.kind === 'edit' ? 1 : s.kind === 'run' ? 2 : 0), 0);
   // the 4-step bar (Lezen → Aanpassen → Testen → Klaar): done white, the current step in the state's colour
   function steps4(x, y, w, phase, colour, done) {
@@ -1780,11 +1969,14 @@
   // ---- Home, like Apple Music: calm black, white and grey; colour only comes from a cover (the album, Claude's tile).
   // One "now playing" row on top (Claude's job, your music, or all quiet) and a tab bar of apps underneath. ----
   const alpha = (c, a) => { const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c); if (m) return `rgba(${m[1]},${m[2]},${m[3]},${a})`; const n = parseInt(String(c).replace('#', '').slice(0, 6), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
-  window.__twocodeClaudeCover = (x, y, s, r, agent) => { // a square cover like an album, Claude's own colour, the mark in the middle
+  window.__twocodeClaudeCover = (x, y, s, r, agent) => { // a square cover like an album
     ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, s, s, r); const g = ctx.createLinearGradient(x, y, x + s, y + s);
-    if (agent === 'codex') { g.addColorStop(0, '#3a3a3c'); g.addColorStop(1, '#141416'); } else { g.addColorStop(0, '#e08a6c'); g.addColorStop(1, '#9c4126'); }
+    if (agent === 'codex') { g.addColorStop(0, '#3a3a3c'); g.addColorStop(1, '#141416'); }
+    else if (agent === 'antigravity') { g.addColorStop(0, '#4285f4'); g.addColorStop(1, '#1a73e8'); }
+    else { g.addColorStop(0, '#e08a6c'); g.addColorStop(1, '#9c4126'); }
     ctx.fillStyle = g; ctx.fill(); ctx.restore();
-    claudeMark(x + s / 2, y + s / 2, '#ffffff', s * 0.42);
+    if (agent === 'antigravity') geminiMark(x + s / 2, y + s / 2, '#ffffff', s * 0.46);
+    else claudeMark(x + s / 2, y + s / 2, '#ffffff', s * 0.42);
   };
   function scrub(x, y, w, part, live) { // a thin progress line like the music scrubber
     box(x, y, w, 4, 2, C.g3);
@@ -1802,7 +1994,8 @@
   const WHITE = 'rgba(255,255,255,.18)';
   function widget(x, y, s, key, colour, live, under = null) {
     const b = { x, y, width: s, height: s }, over = inside(pointer.x, pointer.y, b), t = performance.now() / 1000;
-    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, s, s, 22); ctx.fillStyle = '#000'; ctx.fill(); ctx.clip();
+    const isGlassy = (typeof window.__twocodeIsGlassy === 'function' && window.__twocodeIsGlassy()) || localStorage.getItem('twocode:glassy') === '1';
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, s, s, 22); ctx.fillStyle = isGlassy ? 'rgba(255,255,255,.07)' : '#000'; ctx.fill(); ctx.clip();
     const k = live ? 0.82 + 0.3 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 / 2.6)) : 1; // breathing while something happens
     const glow = (c, a) => { const g = ctx.createLinearGradient(0, y + s * 0.18, 0, y + s);
       g.addColorStop(0, alpha(c, 0)); g.addColorStop(0.58, alpha(c, 0.3 * a)); g.addColorStop(1, alpha(c, Math.min(0.92, 0.72 * a)));
@@ -1816,7 +2009,9 @@
     }
     if (over) { ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(x, y, s, s); }
     ctx.restore();
-    ctx.save(); ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, s - 1, s - 1, 21.5); ctx.strokeStyle = 'rgba(255,255,255,.1)'; ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, s - 1, s - 1, 21.5);
+    ctx.strokeStyle = isGlassy ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.1)';
+    ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
     if (key) hit[key] = b; return over;
   }
   function ring(cx, cy, r, part, colour, track, lw = 5) {
@@ -1828,12 +2023,14 @@
   const label = (str, x, y) => tiny(str, x, y, 11, 'rgba(255,255,255,.65)', 600);
   const lower = (str, x, y, w) => tiny(str, x, y, 12, 'rgba(255,255,255,.8)', 500, 'left', w);
   function claudeWidget(x, y, s) {
-    const info = claudeInfo(), p = info.p || providers().find(q => q.kind === 'hooks' && q.connected) || providers().find(q => q.kind === 'hooks'), st = info.p ? info.st : (p?.state || 'ready');
-    const pad = 14, rx = x + s - pad - 20, ry = y + pad + 20, key = 'monitor_' + (p?.provider || 'claudecode');
+    const info = claudeInfo(), p = info.p || providers().find(q => q.agent === 'antigravity' && q.connected) || providers().find(q => q.kind === 'hooks' && q.connected) || providers().find(q => q.agent === 'antigravity') || providers().find(q => q.kind === 'hooks'), st = info.p ? info.st : (p?.state || 'ready');
+    const isAnti = !p?.agent || p.agent === 'antigravity';
+    const pad = 14, rx = x + s - pad - 20, ry = y + pad + 20, key = 'monitor_' + (p?.provider || 'antigravity');
+    const mark = (mx, my, sz = 16) => isAnti ? geminiMark(mx, my, '#ffffff', sz * 1.1) : claudeMark(mx, my, '#ffffff', sz);
     if (!p?.connected) {
-      widget(x, y, s, key, '#d97757', false);
-      label(p?.agent === 'codex' ? 'Codex' : 'Claude Code', x + pad, y + pad + 11);
-      ring(rx, ry, 18, 0, '#ffffff', WHITE); claudeMark(rx, ry, '#ffffff', 16);
+      widget(x, y, s, key, '#4285f4', false);
+      label(p?.agent === 'codex' ? 'Codex' : (isAnti ? 'Antigravity' : 'Claude Code'), x + pad, y + pad + 11);
+      ring(rx, ry, 18, 0, '#ffffff', WHITE); mark(rx, ry, 16);
       big(T('Koppel', 'Connect'), x + pad, y + s - 34, 26, '#ffffff', 700, s - pad * 2); lower(T('in Instellingen', 'in Settings'), x + pad, y + s - 15, s - pad * 2);
       return;
     }
@@ -1841,19 +2038,20 @@
     const doneLook = window.__twocodeDoneLook(st === 'done' ? p : null), recent = Boolean(doneLook), five = p.usage?.fiveHour;
     const past = (state.history || []).filter(h => (h.agent || 'claude') === (p.agent || 'claude'));
     const today = past.filter(h => new Date(h.at).toDateString() === new Date().toDateString() && h.result === 'done').length;
-    let colour = p.agent === 'codex' ? '#3b82f6' : '#d97757', live = false, part, head, line;
+    let colour = p.agent === 'codex' ? '#3b82f6' : (isAnti ? '#4285f4' : '#d97757'), live = false, part, head, line;
     if (working) { live = true; part = (phase + 0.5) / 4; head = clockText(p); line = (!steps.length ? T('Denkt na', 'Thinking') : [T('Lezen', 'Reading'), T('Aanpassen', 'Editing'), T('Testen', 'Testing')][phase]) + (p.code?.file && steps[steps.length - 1]?.kind === 'edit' ? ' · ' + p.code.file : ''); }
-    else if (st === 'question') { live = true; colour = '#ff9f0a'; part = 1; head = p.permission ? T('Mag dit?', 'May I?') : T('Jouw beurt', 'Your turn'); line = T('Claude wacht op jou', 'Claude is waiting'); }
+    else if (st === 'question') { live = true; colour = '#ff9f0a'; part = 1; head = p.permission ? T('Mag dit?', 'May I?') : T('Jouw beurt', 'Your turn'); line = T('Wacht op jou', 'Waiting for you'); }
     else if (doneLook) { colour = doneLook.colour; part = 1; head = T('Klaar', 'Done'); line = p.prompt || T('Alle stappen gedaan', 'Every step done'); }
     else if (failed) { colour = C.red; part = 1; head = T('Gestopt', 'Stopped'); line = p.detail || ''; }
     else { part = five ? five.used / 100 : 0; head = String(today); line = T(today === 1 ? 'klus vandaag' : 'klussen vandaag', today === 1 ? 'job today' : 'jobs today'); }
-    // done and looked at: the green fades and Claude's own orange comes back underneath
-    widget(x, y, s, key, colour, live, doneLook && !doneLook.fresh ? { colour: p.agent === 'codex' ? '#3b82f6' : '#d97757', k: 1 - doneLook.k } : null);
-    label(p.agent === 'codex' ? 'Codex' : 'Claude Code', x + pad, y + pad + 11);
+    // done and looked at: the green fades and agent's own colour comes back underneath
+    widget(x, y, s, key, colour, live, doneLook && !doneLook.fresh ? { colour: p.agent === 'codex' ? '#3b82f6' : (isAnti ? '#4285f4' : '#d97757'), k: 1 - doneLook.k } : null);
+    label(p.agent === 'codex' ? 'Codex' : (isAnti ? 'Antigravity' : 'Claude Code'), x + pad, y + pad + 11);
+    if (p.list && p.list.length > 1) tiny(`+${p.list.length - 1}`, x + pad + (isAnti ? 66 : 72), y + pad + 11, 10, 'rgba(255,255,255,.9)', 700);
     ring(rx, ry, 18, part, '#ffffff', WHITE);
-    if (working) { ctx.save(); ctx.translate(rx, ry); ctx.rotate(performance.now() / 1100); claudeMark(0, 0, '#ffffff', 16); ctx.restore(); }
+    if (working) { ctx.save(); ctx.translate(rx, ry); ctx.rotate(performance.now() / 1100); mark(0, 0, 16); ctx.restore(); }
     else if (!recent && st !== 'question' && !failed && five) text(five.used + '%', rx, ry + 3.5, 10, '#ffffff', 700, 'center');
-    else claudeMark(rx, ry, '#ffffff', 16);
+    else mark(rx, ry, 16);
     big(head, x + pad, y + s - 34, head.length > 6 ? 22 : 28, '#ffffff', 700, s - pad * 2);
     lower(line, x + pad, y + s - 15, s - pad * 2);
   }
@@ -1900,8 +2098,15 @@
   function drawBlocks(area) {
     for (const key of ['hmPrev', 'hmNext', 'homePlay', 'focusQuick', 'hmVol', 'focusApp', 'spotifyApp', 'ghost', 'chatApp']) delete hit[key];
     for (const key of Object.keys(hit)) if (key.startsWith('monitor_')) delete hit[key];
-    const gap = 10, s = Math.min((area.width - gap * 2) / 3, area.height - 6), y = area.y + 2, x0 = area.x + (area.width - (s * 3 + gap * 2)) / 2;
-    claudeWidget(x0, y, s); musicWidget(x0 + s + gap, y, s); focusWidget(x0 + (s + gap) * 2, y, s);
+    // the tiles of the apps you have (Settings → Apps: a user turned Focus off and still saw its tile), centred
+    const tiles = [['claude', claudeWidget], ['spotify', musicWidget], ['focus', focusWidget]].filter(([id]) => installed(id));
+    // your own links (rest-ui.js): a block of small squares next to them; with three big tiles it is half as wide (2 links)
+    const links = (window.__twocodeLinks?.() || []).length, half = links && tiles.length >= 3 ? 0.5 : 1, parts = tiles.length + (links ? half : 0);
+    for (const key of Object.keys(hit)) if (key.startsWith('link_')) delete hit[key];
+    const gap = 10, s = Math.min((area.width - gap * (Math.max(3, Math.ceil(parts)) - 1)) / Math.max(3, parts), area.height - 6), y = area.y + 2;
+    const total = s * parts + gap * (tiles.length + (links ? 1 : 0) - 1), x0 = area.x + (area.width - total) / 2;
+    tiles.forEach(([, draw], i) => draw(x0 + (s + gap) * i, y, s));
+    if (links) window.__twocodeLinksBlock?.(x0 + (s + gap) * tiles.length, y, s * half, s);
   }
   canvas.addEventListener('click', e => { // "Alle apps" on Home
     if (currentView !== 'home' || mode !== 'expanded' || !inside(e.clientX, e.clientY, hit.allApps)) return;
@@ -1952,7 +2157,7 @@
   // ---- the + menu: a widget gallery with a live preview, sizes and ready-made layouts ----
   function openGallery(c, r) {
     homeEdit = true; drag = null;
-    const on = getWidgets().map(w => w.id), pick = Object.keys(APPS).find(id => !on.includes(id)) || 'claude';
+    const on = getWidgets().map(w => w.id), pick = Object.keys(APPS).find(id => installed(id) && !on.includes(id)) || 'claude';
     gallery = { pick, size: getWidgets().find(w => w.id === pick)?.size || 'S', c, r };
     refreshWidgetData(); sound('click'); setMode('expanded', false);
   }
@@ -2099,7 +2304,7 @@
   const HOME_ICONS = [
     { id: 'spotify', key: 'spotifyApp', icon: 'music', nl: 'Muziek', en: 'Music', c: '#ffffff' },
     { id: 'chat', key: 'chatApp', icon: 'robo', nl: 'Robo', en: 'Robo', c: '#ffffff' },
-    { id: 'claude', key: 'monitor_claudecode', icon: 'terminal', nl: 'Claude', en: 'Claude', c: '#ffffff' },
+    { id: 'claude', key: 'monitor_antigravity', icon: 'antigravity', nl: 'Antigravity', en: 'Antigravity', c: '#ffffff' },
     { id: 'focus', key: 'focusApp', icon: 'timer', nl: 'Focus', en: 'Focus', c: '#ffffff' },
     { id: 'tray', key: 'trayApp', icon: 'tray', nl: 'Lade', en: 'Tray', c: '#ffffff' },
     { id: 'clips', key: 'clipsApp', icon: 'copy', nl: 'Klembord', en: 'Clipboard', c: '#ffffff' },
@@ -2148,7 +2353,7 @@
   // ---- Your shortcuts (the + button): you choose which apps are here (max 4). The same apps are on the home card. ----
   const APPS = {
     spotify: { icon: 'music', label: 'Spotify', key: 'spotifyApp', tint: () => window.__twocodeAlbumColour || '#1ed760' },
-    claude: { icon: 'terminal', label: 'AI', key: 'monitor_claudecode', tint: () => '#c6e994' },
+    claude: { icon: 'antigravity', label: 'Antigravity', key: 'monitor_antigravity', tint: () => '#4285f4' },
     focus: { icon: 'timer', label: 'Focus', key: 'focusApp', tint: () => '#ffb35c' },
     tray: { icon: 'tray', label: 'Lade', key: 'trayApp', tint: () => '#7ab8ff' },
     clips: { icon: 'copy', label: 'Klembord', key: 'clipsApp', tint: () => '#5ad1c4' },
@@ -2199,7 +2404,7 @@
       ctx.restore();
       hit['scToggle_' + app.id] = b;
     });
-    text(T('Tip: Ctrl + Alt + 1–6 opent apps ook met je toetsenbord', 'Tip: Ctrl + Alt + 1–6 opens apps with your keyboard too'), x + w / 2, area.y + area.height - 8, 12, 'rgba(255,255,255,.4)', 500, 'center');
+    text(T('Tip: sneltoetsen stel je in bij Instellingen → Algemeen', 'Tip: set your keyboard shortcuts in Settings → General'), x + w / 2, area.y + area.height - 8, 12, 'rgba(255,255,255,.4)', 500, 'center');
   }
   canvas.addEventListener('click', event => {
     if (currentView !== 'shortcuts' || mode !== 'expanded') return;
@@ -2274,7 +2479,7 @@
     const display = show ? 'block' : 'none'; if (root.style.display !== display) root.style.display = display;
     if (show) {
       const p = current(), stage = Boolean(p?.kind === 'hooks' && p.connected && window.__twocodePlaceOnStage);
-      root.classList.toggle('cl-new', stage); root.classList.toggle('cc-codex', stage && p.agent === 'codex'); // Codex: blue
+      root.classList.toggle('cl-new', stage); root.classList.toggle('cc-codex', stage && p?.agent === 'codex'); root.classList.toggle('cc-antigravity', stage && p?.agent === 'antigravity'); // Codex: blue, AGY: google blue
       if (stage) window.__twocodePlaceOnStage(root, contentRect()); else window.__twocodePage.place(root, contentRect());
     }
     requestAnimationFrame(position);

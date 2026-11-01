@@ -128,6 +128,8 @@ canvas {
 <script>
 
 'use strict';
+window.__twocodeIsGlassy = () => localStorage.getItem('twocode:glassy') === '1';
+if (window.__twocodeIsGlassy()) document.body.classList.add('twocode-glassy');
 document.fonts?.load( '600 16px Inter' ); // the canvas uses Inter as soon as it is there
 const canvas =
   document.getElementById(
@@ -2129,13 +2131,32 @@ function drawIsland() {
   ctx.shadowColor = 'rgba(0,0,0,.28)';
   ctx.shadowBlur = 14;
   ctx.shadowOffsetY = 3;
+  // See-through (Settings → General, a user's idea): the black is filled twice (with and without shadow), so each fill
+  // gets the share that adds up to the chosen strength
+  const isGlassy = (typeof window.__twocodeIsGlassy === 'function' && window.__twocodeIsGlassy()) || localStorage.getItem('twocode:glassy') === '1';
+  const seeThrough = isGlassy ? 0.38 : (window.__twocodeIslandAlpha?.() ?? 1);
+  const black = isGlassy ? 'rgba(16, 20, 24, 0.65)' : (seeThrough >= 1 ? '#000' : `rgba(0,0,0,${( 1 - Math.sqrt( 1 - seeThrough ) ).toFixed( 3 )})`);
   islandPath( x, 0, visual.width, visual.height, visual.radius );
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = black;
   ctx.fill();
   ctx.restore();
   islandPath( x, 0, visual.width, visual.height, visual.radius );
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = black;
   ctx.fill();
+  if (isGlassy) {
+    ctx.save();
+    islandPath( x, 0, visual.width, visual.height, visual.radius );
+    const glassGrad = ctx.createLinearGradient(x, 0, x, visual.height);
+    glassGrad.addColorStop(0, 'rgba(255, 255, 255, 0.14)');
+    glassGrad.addColorStop(0.15, 'rgba(255, 255, 255, 0.04)');
+    glassGrad.addColorStop(1, 'rgba(0, 0, 0, 0.12)');
+    ctx.fillStyle = glassGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
   window.__twocodeIslandBackdrop?.( x, visual.width, visual.height, visual.radius ); // a page may colour the whole island
   const line = window.__twocodeEyes?.()?.color;
   if ( line ) { // (not along the top: there it flows into the screen edge)
@@ -4029,7 +4050,8 @@ let introStarted =
 
 let introFinished =
   false;
-window.__twocodeReplayIntro = () => { introStarted = performance.now(); introFinished = false; }; // videos and tests: play the startup again
+let introLast = null; // the last frame of the startup: its clock only runs while frames are really drawn
+window.__twocodeReplayIntro = () => { introStarted = performance.now(); introLast = null; introFinished = false; }; // videos and tests: play the startup again
 
 
 function drawIntro(
@@ -4037,6 +4059,10 @@ function drawIntro(
 ) {
   // Startup, calm like the Dynamic Island: a dot comes out of the top edge and springs open into the small pill,
   // then Robo opens his eyes (they grow from a line, like opening). Nothing pops in at once.
+  // The clock starts at the first frame you can see, and a busy moment (the app still starting up) pauses it instead of
+  // making it jump ahead: otherwise Robo's eyes were suddenly there.
+  if ( introLast == null ) introStarted = now; else if ( now - introLast > 120 ) introStarted += now - introLast - 50; // a real stall: at most 50 ms on
+  introLast = now;
   const centerX = innerWidth / 2;
   const progress = clamp( ( now - introStarted ) / 1300 );
   const grow = clamp( progress / 0.5 ), back = 1.6;
@@ -4308,11 +4334,14 @@ function updateHover(
     /*
       Elk scherm klapt in als je er niet mee bezig bent.
       Niet terwijl je typt: dan blijft hij open.
+      Ook niet vlak na een sneltoets: dan staat je muis er nooit op,
+      dus blijft hij 5 seconden open (__twocodeStayOpenUntil).
     */
 
     if (
       !over &&
-      !isTyping()
+      !isTyping() &&
+      !(now < (window.__twocodeStayOpenUntil || 0))
     ) {
       if (
         leaveStartedAt ===
@@ -4766,6 +4795,8 @@ function drawIslandFrame(
   }
 
 
+  if (window.__twocodeTuck?.draw(now)) return; // tucked away: only a thin line, clicks go through (tuck-ui.js)
+
   updateTransition(
     now
   );
@@ -4856,7 +4887,8 @@ function drawIslandFrame(
   // browser's tabs and address bar) eat clicks meant for Chrome until you clicked TwoCode again.
   sendInteractive(
     overIsland ||
-    overHit
+    overHit ||
+    Boolean(window.__twocodeMenuOpen?.())
   );
 
 
@@ -4877,9 +4909,12 @@ let twocodeLastDraw = -Infinity;
 
 function render(now) {
   try {
-    // Resting and the mouse is elsewhere: 30 frames a second is plenty for the small pill
-    // and halves the work the PC does all day long.
-    if (mode === 'rest' && !pointer.known && now - twocodeLastDraw < 30) return;
+    // How often the island draws (twocode-fun.js: Settings → Algemeen → Prestaties). Never faster than 60 a second,
+    // also on a 144 Hz screen (it drew 144 times a second there); resting with the mouse elsewhere: 30, and the
+    // Light setting (lighter laptops, a user with 8 GB saw it stutter) 30 and 15. A see-through window is heavy work
+    // for Windows, so every frame saved counts.
+    const fps = window.__twocodeFps?.(mode === 'rest' && !pointer.known) || (mode === 'rest' && !pointer.known ? 30 : 60);
+    if (now - twocodeLastDraw < 1000 / fps - 2) return;
     twocodeLastDraw = now;
     drawIslandFrame(now);
   } catch (error) {
@@ -5297,6 +5332,7 @@ setInterval(
 <script src="./ai-settings-ui.js"></script>
 <script src="./ai-monitor-ui.js"></script>
 <script src="./spotify-ui.js"></script>
+<script src="./lyrics-ui.js"></script>
 <script src="./twocode-fun.js"></script>
 <script src="./buddy-ui.js"></script>
 <script src="./settings-bridge-ui.js"></script>
@@ -5305,6 +5341,8 @@ setInterval(
 <script src="./focus-ui.js"></script>
 <script src="./tools-ui.js"></script>
 <script src="./island-window-ui.js"></script>
+<script src="./tuck-ui.js"></script>
+<script src="./rest-ui.js"></script>
 
 </body>
 

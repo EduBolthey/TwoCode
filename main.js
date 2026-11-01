@@ -1,4 +1,7 @@
+if (require('./self-install.cjs').handedOver) return; // started from elsewhere: the installed TwoCode (AppData\Local\Programs\TwoCode) takes over
+require('./graphics-main.cjs'); // safe graphics (a black box around the island on some PCs): has to be set before Electron is ready
 require('./tray-main.cjs'); // first: tray icon + only one TwoCode at a time
+if (require('./uninstall-main.cjs').only) return; // TwoCode.exe --uninstall (Settings → Apps) while TwoCode was not running
 require('./island-window-main');
 const {
   app,
@@ -21,6 +24,13 @@ require('./ai-monitor-main.cjs');
 require('./extras-main.cjs');
 require('./settings-app-main.cjs'); // TwoCode Instellingen: settings as their own app
 require('./license-main.cjs'); // packs bought on twocode.nl: which extra apps are open
+require('./auto-update.cjs'); // updates from twocode.nl, installed at the next restart
+require('./welcome-main.cjs'); // the welcome tour the first time TwoCode starts
+require('./shortcuts-main.cjs'); // keyboard shortcuts (Settings → Algemeen → Sneltoetsen)
+require('./lyrics-main.cjs'); // song lyrics in the island, from LRCLIB
+require('./game-mode-main.cjs'); // the island steps aside while a game runs full screen
+require('./links-main.cjs'); // your own links on Home
+require('./system-main.cjs'); // CPU and memory for the resting island
 
 app.setAppUserModelId(
   'nl.twocode.assistent'
@@ -32,7 +42,7 @@ app.setAppUserModelId(
 // ============================================================
 
 const PANEL_WIDTH = 860; // wide and low, like NotchNook
-const PANEL_HEIGHT = 320;
+const PANEL_HEIGHT = 420;
 const ISLAND_FLOAT = 0; // the island hangs from the top edge of the screen (like the notch on a MacBook)
 
 let mascotWindow = null;
@@ -3981,6 +3991,23 @@ async function spotifySeek(
 // WINDOW POSITION
 // ============================================================
 
+// The island's size (Settings → General → Size, a user's idea): compact, normal or large. The whole window is zoomed,
+// so everything in it grows or shrinks together, and the window itself grows along.
+let islandScale = 1;
+ipcMain.on('island:scale', (event, value) => {
+  if (!mascotWindow || mascotWindow.isDestroyed() || event.sender !== mascotWindow.webContents) return;
+  const scale = [0.85, 1, 1.18].includes(Number(value)) ? Number(value) : 1;
+  if (scale === islandScale) return;
+  islandScale = scale;
+  // (a window that cannot be resized by hand keeps its size as the minimum once it grew: allow it for this moment)
+  mascotWindow.setResizable(true);
+  mascotWindow.setMinimumSize(1, 1);
+  mascotWindow.setSize(Math.round(PANEL_WIDTH * scale), Math.round(PANEL_HEIGHT * scale));
+  mascotWindow.setResizable(false);
+  mascotWindow.webContents.setZoomFactor(scale);
+  positionMascot();
+});
+
 function positionMascot() {
   if (
     !mascotWindow ||
@@ -3999,7 +4026,7 @@ function positionMascot() {
       display.bounds.x +
       (
         display.bounds.width -
-        PANEL_WIDTH
+        Math.round( PANEL_WIDTH * islandScale ) // the size you chose (Settings → General → Size)
       ) /
       2
     );
@@ -4391,11 +4418,17 @@ ipcMain.handle(
 );
 
 
+// the music: Spotify's own API when you logged in and it works for you, otherwise what Windows says plays (media-main.cjs)
+const music = require('./media-main.cjs').music({
+  hasLogin: () => Boolean(loadSpotifyTokens()), state: getSpotifyState, control: spotifyControl, seek: spotifySeek,
+  devices: spotifyDevices, transfer: spotifyTransfer
+});
+
 ipcMain.handle(
   'spotify:get-state',
 
   async () =>
-    getSpotifyState()
+    music.state()
 );
 
 
@@ -4406,14 +4439,14 @@ ipcMain.handle(
     _event,
     action
   ) =>
-    spotifyControl(
+    music.control(
       action
     )
 );
 
 
-ipcMain.handle('spotify:devices', () => spotifyDevices()); // Spotify Connect: where it can play
-ipcMain.handle('spotify:transfer', (_event, id) => spotifyTransfer(id));
+ipcMain.handle('spotify:devices', () => music.devices()); // Spotify Connect: where it can play
+ipcMain.handle('spotify:transfer', (_event, id) => music.transfer(id));
 
 ipcMain.handle(
   'spotify:seek',
@@ -4422,7 +4455,7 @@ ipcMain.handle(
     _event,
     positionMs
   ) =>
-    spotifySeek(
+    music.seek(
       positionMs
     )
 );
@@ -4504,8 +4537,11 @@ app.on(
 
     goodbyeShown = true;
     event.preventDefault();
-    mascotWindow.webContents.send('twocode:goodbye');
-    setTimeout(() => app.quit(), 1000); // right after the goodbye (twocode-fun.js: eyes close, the island slips into the edge)
+    const update = app.twocodeUpdating || null; // auto-update.cjs: TwoCode restarts with a new version ("Installing update…")
+    mascotWindow.webContents.send('twocode:goodbye', update ? { update } : {});
+    // right after the goodbye (twocode-fun.js: eyes close, the island slips into the edge) everything disappears at once,
+    // even when quitting itself takes a moment longer (it used to leave an empty island for a few seconds)
+    setTimeout(() => { for (const w of BrowserWindow.getAllWindows()) { try { if (!w.isDestroyed()) w.hide(); } catch {} } app.quit(); }, update ? 2300 : 1000);
   }
 );
 

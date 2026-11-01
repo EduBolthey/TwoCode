@@ -19,14 +19,14 @@
 #twocode-focus .grey{--b:#1c1c1e;--f:#ffffff}
 #twocode-focus .white{--b:#ffffff;--f:#000000}
 /* the picker wheel */
-#twocode-focus .fo-wheel{position:relative;flex:1;height:132px;display:flex;justify-content:center;overflow:hidden}
+#twocode-focus .fo-wheel{position:relative;flex:1;height:132px;display:flex;justify-content:center;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 24%,#000 76%,transparent 100%);mask-image:linear-gradient(180deg,transparent 0%,#000 24%,#000 76%,transparent 100%)}
 #twocode-focus .fo-band{position:absolute;left:0;right:0;top:50%;height:40px;margin-top:-20px;border-radius:12px;background:#1c1c1e}
 #twocode-focus .fo-col{position:relative;width:50%;height:100%;cursor:ns-resize}
 #twocode-focus .fo-list{position:absolute;left:0;right:0;top:50%;transition:transform .3s cubic-bezier(.2,.9,.3,1)}
 #twocode-focus .fo-num{height:40px;display:flex;align-items:center;justify-content:flex-end;padding-right:54px;font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;color:#48484a;cursor:pointer}
 #twocode-focus .fo-num.on{color:#fff}
 #twocode-focus .fo-unit{position:absolute;left:calc(100% - 48px);top:50%;margin-top:-11px;font-size:17px;font-weight:600;pointer-events:none}
-#twocode-focus .fo-fade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#000 0%,rgba(0,0,0,0) 32%,rgba(0,0,0,0) 68%,#000 100%)}
+#twocode-focus .fo-fade{display:none}
 #twocode-focus .fo-foot{flex:none;height:34px;display:flex;align-items:center;gap:6px}
 #twocode-focus .fo-chip{height:30px;padding:0 13px;border-radius:8px;background:#1c1c1e;font-size:13px;font-weight:600;color:#fff}
 #twocode-focus .fo-chip:hover{background:#2c2c2e}
@@ -53,7 +53,31 @@
 #twocode-focus .fo-big small{font-size:12px;margin-bottom:-2px}
 #twocode-focus .fo-big b{font-size:52px;line-height:58px;letter-spacing:-1.5px}
 #twocode-focus .fo-bar{height:3px;margin:4px 0 6px}
-#twocode-focus .fo-foot span{font-size:11px !important}`;
+#twocode-focus .fo-foot span{font-size:11px !important}
+body.twocode-glassy #twocode-focus .fo-band,
+#twocode-focus.twocode-glassy .fo-band{background:rgba(255,255,255,.08)!important;border:1px solid rgba(255,255,255,.14)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),0 4px 16px rgba(0,0,0,.2)!important}
+body.twocode-glassy #twocode-focus .grey,
+#twocode-focus.twocode-glassy .grey{--b:rgba(255,255,255,.09)!important;border:1px solid rgba(255,255,255,.14)!important;backdrop-filter:blur(14px)!important;-webkit-backdrop-filter:blur(14px)!important;color:#fff!important}
+body.twocode-glassy #twocode-focus .grey:hover,
+#twocode-focus.twocode-glassy .grey:hover{--b:rgba(255,255,255,.18)!important;border-color:rgba(255,255,255,.26)!important}
+body.twocode-glassy #twocode-focus .white,
+#twocode-focus.twocode-glassy .white{background:#fff!important;color:#000!important;box-shadow:0 4px 16px rgba(0,0,0,.35)!important}
+body.twocode-glassy #twocode-focus .fo-chip,
+#twocode-focus.twocode-glassy .fo-chip{background:rgba(255,255,255,.08)!important;border:1px solid rgba(255,255,255,.12)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;color:rgba(255,255,255,.85)!important}
+body.twocode-glassy #twocode-focus .fo-chip:hover,
+#twocode-focus.twocode-glassy .fo-chip:hover{background:rgba(255,255,255,.16)!important;border-color:rgba(255,255,255,.22)!important}
+body.twocode-glassy #twocode-focus .fo-chip.on,
+#twocode-focus.twocode-glassy .fo-chip.on{background:rgba(255,255,255,.22)!important;border-color:rgba(255,255,255,.38)!important;color:#fff!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important}
+body.twocode-glassy #twocode-focus .fo-bar,
+#twocode-focus.twocode-glassy .fo-bar{background:rgba(255,255,255,.16)!important}
+body.twocode-glassy #twocode-focus .fo-num,
+#twocode-focus.twocode-glassy .fo-num{color:rgba(255,255,255,.32)}
+body.twocode-glassy #twocode-focus .fo-num.on,
+#twocode-focus.twocode-glassy .fo-num.on{color:#fff!important;text-shadow:0 1px 8px rgba(0,0,0,.4)}
+body.twocode-glassy #twocode-focus .fo-unit,
+#twocode-focus.twocode-glassy .fo-unit{color:rgba(255,255,255,.72)}
+body.twocode-glassy #twocode-focus .fo-end,
+#twocode-focus.twocode-glassy .fo-end{color:rgba(255,255,255,.65)!important}`;
   document.head.appendChild(style);
 
   const F = () => window.__twocodeFocus;
@@ -66,7 +90,7 @@
     return `<div class="fo-col" data-col="${kind}"><div class="fo-list" style="transform:translateY(${-(value * ROW) - ROW / 2}px)">${nums}</div><span class="fo-unit">${unit}</span></div>`;
   }
   function render() {
-    const f = F(); if (!f) return;
+    const isGlassy = Boolean(window.__twocodeIsGlassy?.() || localStorage.getItem('twocode:glassy') === '1' || document.body.classList.contains('twocode-glassy')); root.classList.toggle('twocode-glassy', isGlassy); const f = F(); if (!f) return;
     const running = f.active();
     const key = running ? 'run' : 'idle:' + f.chosen();
     if (key === lastKey) return update(); // only rebuild when something changed
@@ -90,7 +114,7 @@
     update();
   }
   function update() {
-    const f = F(); if (!f) return;
+    const isGlassy = Boolean(window.__twocodeIsGlassy?.() || localStorage.getItem('twocode:glassy') === '1' || document.body.classList.contains('twocode-glassy')); root.classList.toggle('twocode-glassy', isGlassy); const f = F(); if (!f) return;
     const end = root.querySelector('#fo-end');
     if (!f.active()) { if (end) end.textContent = T('Klaar om ', 'Done at ') + at(Date.now() + f.chosen() * 1000); return; }
     const left = root.querySelector('#fo-left'), ring = root.querySelector('#fo-ring');
@@ -122,7 +146,7 @@
   drawExpanded = function (alpha) { if (currentView !== 'focus') return baseExpanded(alpha); drawHeader(alpha); };
   let shown = false;
   (function position() {
-    const show = currentView === 'focus' && mode === 'expanded' && visual.width > 500 && visual.height > Math.min(targetHeight() - 30, 150);
+    const isGlassy = Boolean(window.__twocodeIsGlassy?.() || localStorage.getItem('twocode:glassy') === '1' || document.body.classList.contains('twocode-glassy')); if (root.classList.contains('twocode-glassy') !== isGlassy) root.classList.toggle('twocode-glassy', isGlassy); const show = currentView === 'focus' && mode === 'expanded' && visual.width > 500 && visual.height > Math.min(targetHeight() - 30, 150);
     const display = show ? 'block' : 'none'; if (root.style.display !== display) root.style.display = display;
     if (show) { window.__twocodePage.place(root, contentRect()); if (!shown) lastKey = ''; render(); }
     shown = show;
